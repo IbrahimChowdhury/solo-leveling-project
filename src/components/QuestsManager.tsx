@@ -17,14 +17,15 @@ export default function QuestsManager({
   customQuests,
 }: QuestsManagerProps) {
   const router = useRouter()
-  const [loading, setLoading] = useState(false)
+  const [loadingStatus, setLoadingStatus] = useState<'forging' | 'updating' | 'deleting' | 'fetching' | null>(null)
+  const [questIdToDelete, setQuestIdToDelete] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   
   // Form States
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [statCategory, setStatCategory] = useState('attack_power')
-  const [xpReward, setXpReward] = useState(50)
+  const [xpReward, setXpReward] = useState(30)
   const [repeatType, setRepeatType] = useState<'one-time' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('daily')
   const [proofRequired, setProofRequired] = useState(false)
   const [editingQuestId, setEditingQuestId] = useState<string | null>(null)
@@ -36,7 +37,7 @@ export default function QuestsManager({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    setLoading(true)
+    setLoadingStatus(editingQuestId ? 'updating' : 'forging')
 
     if (editingQuestId) {
       const res = await editCustomQuest(
@@ -49,7 +50,7 @@ export default function QuestsManager({
         proofRequired
       )
 
-      setLoading(false)
+      setLoadingStatus(null)
 
       if (res.error) {
         setError(res.error)
@@ -57,17 +58,19 @@ export default function QuestsManager({
         // Clear form
         setTitle('')
         setDescription('')
-        setXpReward(50)
+        setXpReward(30)
         setProofRequired(false)
         setEditingQuestId(null)
+        setLoadingStatus('fetching')
         router.refresh()
+        setTimeout(() => setLoadingStatus(null), 1000)
       }
       return
     }
 
     if (isLimitReached) {
       setError(`Active custom quests limit reached (${customQuests.length}/${limit}). ${profile.is_pro ? 'Limit is 40.' : 'Upgrade to PRO to get 40 slots!'}`)
-      setLoading(false)
+      setLoadingStatus(null)
       return
     }
 
@@ -80,7 +83,7 @@ export default function QuestsManager({
       proofRequired
     )
 
-    setLoading(false)
+    setLoadingStatus(null)
 
     if (res.error) {
       setError(res.error)
@@ -88,23 +91,32 @@ export default function QuestsManager({
       // Clear form
       setTitle('')
       setDescription('')
-      setXpReward(50)
+      setXpReward(30)
       setProofRequired(false)
+      setLoadingStatus('fetching')
       router.refresh()
+      setTimeout(() => setLoadingStatus(null), 1000)
     }
   }
 
-  const handleDelete = async (questId: string) => {
-    if (!confirm('Are you sure you want to delete this custom quest?')) return
+  const performDelete = async (questId: string) => {
+    setLoadingStatus('deleting')
     const res = await deleteCustomQuest(questId)
+    setLoadingStatus(null)
     if (res.error) {
       alert(res.error)
     } else {
       if (editingQuestId === questId) {
         handleCancelEdit()
       }
+      setLoadingStatus('fetching')
       router.refresh()
+      setTimeout(() => setLoadingStatus(null), 1000)
     }
+  }
+
+  const handleDelete = (questId: string) => {
+    setQuestIdToDelete(questId)
   }
 
   const handleStartEdit = (quest: CustomQuest) => {
@@ -122,10 +134,66 @@ export default function QuestsManager({
     setEditingQuestId(null)
     setTitle('')
     setDescription('')
-    setXpReward(50)
+    setXpReward(30)
     setProofRequired(false)
     setError(null)
   }
+
+  const getLoadingConfig = () => {
+    switch (loadingStatus) {
+      case 'deleting':
+        return {
+          colorClass: 'brand-red',
+          borderColor: 'border-brand-red',
+          glowClass: 'glow-red',
+          tag: '[ SYSTEM STATUS: PURGING COORDINATES ]',
+          title: 'quest is deleting...',
+          description: 'Permanently deleting quest directive and recalibrating coordinates. Please hold position.',
+          loaderColor: 'text-brand-red animate-pulse',
+          dotBg: 'bg-brand-red',
+          progressGrad: 'from-brand-red to-red-650'
+        }
+      case 'updating':
+        return {
+          colorClass: 'brand-purple',
+          borderColor: 'border-brand-purple',
+          glowClass: 'glow-purple',
+          tag: '[ SYSTEM STATUS: RECONFIGURING ]',
+          title: 'UPDATING TRIAL COORDINATES...',
+          description: 'Re-allocating stat benefits and trial difficulty settings. Please hold position.',
+          loaderColor: 'text-brand-purple animate-pulse',
+          dotBg: 'bg-brand-purple',
+          progressGrad: 'from-brand-purple to-violet-500'
+        }
+      case 'fetching':
+        return {
+          colorClass: 'brand-blue',
+          borderColor: 'border-brand-blue',
+          glowClass: 'glow-blue',
+          tag: '[ SYSTEM STATUS: SYNCING COORDINATES ]',
+          title: 'hunter data fetching...',
+          description: 'Retrieving database registries and updating hunter status levels. Please hold position.',
+          loaderColor: 'text-brand-blue animate-pulse',
+          dotBg: 'bg-brand-blue',
+          progressGrad: 'from-brand-blue to-cyan-500'
+        }
+      case 'forging':
+      default:
+        return {
+          colorClass: 'brand-purple',
+          borderColor: 'border-brand-purple',
+          glowClass: 'glow-purple',
+          tag: '[ SYSTEM STATUS: FORGING TRIAL ]',
+          title: 'FORGING QUEST IN THE COMPASS...',
+          description: 'Recalibrating quest objectives parameters and status benefits. Please hold position.',
+          loaderColor: 'text-brand-purple animate-pulse',
+          dotBg: 'bg-brand-purple',
+          progressGrad: 'from-brand-purple to-violet-500'
+        }
+    }
+  }
+
+  const loadingConfig = getLoadingConfig()
 
   return (
     <div className="space-y-8">
@@ -142,13 +210,20 @@ export default function QuestsManager({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left column (1/3): Add Quest Form */}
         <div className="space-y-6">
-          <div className="bg-[#0b0f19] border border-slate-800 rounded-xl p-6 relative overflow-hidden">
-            <h2 className="text-lg font-bold font-mono tracking-widest text-brand-purple glow-text-purple mb-4 uppercase">
-              {editingQuestId ? 'EDIT TRIAL' : 'CREATE TRIAL'}
+          <div className="bg-[#0b0f19] border-2 border-brand-purple/30 rounded-xl p-6 relative overflow-hidden shadow-[0_0_20px_rgba(139,92,246,0.15)]">
+            {/* Tech Bracket Corners */}
+            <div className="absolute top-0 left-0 w-3.5 h-3.5 border-t-2 border-l-2 border-brand-purple" />
+            <div className="absolute top-0 right-0 w-3.5 h-3.5 border-t-2 border-r-2 border-brand-purple" />
+            <div className="absolute bottom-0 left-0 w-3.5 h-3.5 border-b-2 border-l-2 border-brand-purple" />
+            <div className="absolute bottom-0 right-0 w-3.5 h-3.5 border-b-2 border-r-2 border-brand-purple" />
+
+            <h2 className="text-lg font-black font-mono tracking-widest text-brand-purple glow-text-purple mb-5 uppercase flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-purple animate-ping" />
+              {editingQuestId ? '[ EDIT QUEST DECK ]' : '[ FORGE NEW QUEST ]'}
             </h2>
 
             {error && (
-              <div className="p-3 bg-red-950/20 border border-brand-red/50 rounded-lg text-brand-red text-xs text-center font-mono mb-4">
+              <div className="p-3 bg-red-950/40 border border-brand-red rounded-lg text-brand-red text-xs text-center font-mono mb-4 uppercase tracking-wider glow-red">
                 {error}
               </div>
             )}
@@ -175,10 +250,10 @@ export default function QuestsManager({
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-xs font-mono text-gray-400 mb-1 uppercase tracking-wider">
-                  Quest Title
+                <label className="block text-[10px] font-bold font-mono text-brand-purple mb-1.5 uppercase tracking-widest">
+                  [QUEST TITLE / PROTOCOL NAME]
                 </label>
                 <input
                   type="text"
@@ -186,35 +261,35 @@ export default function QuestsManager({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Read 15 pages of code"
-                  disabled={isLimitReached || loading}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-brand-purple"
+                  disabled={isLimitReached || loadingStatus !== null}
+                  className="w-full px-3 py-2 bg-slate-950/80 border border-slate-800 rounded-lg text-white text-sm placeholder-gray-655 focus:outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/40 transition-all font-mono"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-mono text-gray-400 mb-1 uppercase tracking-wider">
-                  Description
+                <label className="block text-[10px] font-bold font-mono text-brand-purple mb-1.5 uppercase tracking-widest">
+                  [TRIAL TARGET PARAMETERS]
                 </label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Details about verification or workout targets..."
                   rows={3}
-                  disabled={isLimitReached || loading}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-brand-purple resize-none"
+                  disabled={isLimitReached || loadingStatus !== null}
+                  className="w-full px-3 py-2 bg-slate-950/80 border border-slate-800 rounded-lg text-white text-sm placeholder-gray-655 focus:outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/40 transition-all resize-none font-mono"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-mono text-gray-400 mb-1 uppercase tracking-wider">
-                    Stat Boost
+                  <label className="block text-[10px] font-bold font-mono text-brand-purple mb-1.5 uppercase tracking-widest">
+                    [ALLOCATION]
                   </label>
                   <select
                     value={statCategory}
                     onChange={(e) => setStatCategory(e.target.value)}
-                    disabled={isLimitReached || loading}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-brand-purple font-mono"
+                    disabled={isLimitReached || loadingStatus !== null}
+                    className="w-full px-3 py-2 bg-slate-950/80 border border-slate-800 rounded-lg text-white text-xs focus:outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/40 font-mono transition-all uppercase tracking-wider"
                   >
                     <option value="attack_power">Attack</option>
                     <option value="intelligence">Intelligence</option>
@@ -226,14 +301,14 @@ export default function QuestsManager({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-mono text-gray-400 mb-1 uppercase tracking-wider">
-                    Schedule
+                  <label className="block text-[10px] font-bold font-mono text-brand-purple mb-1.5 uppercase tracking-widest">
+                    [COOLDOWN]
                   </label>
                   <select
                     value={repeatType}
                     onChange={(e) => setRepeatType(e.target.value as any)}
-                    disabled={isLimitReached || loading}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-brand-purple font-mono"
+                    disabled={isLimitReached || loadingStatus !== null}
+                    className="w-full px-3 py-2 bg-slate-950/80 border border-slate-800 rounded-lg text-white text-xs focus:outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/40 font-mono transition-all uppercase tracking-wider"
                   >
                     <option value="one-time">One Time</option>
                     <option value="daily">Daily</option>
@@ -245,45 +320,48 @@ export default function QuestsManager({
               </div>
 
               <div>
-                <div className="flex justify-between text-xs font-mono text-gray-400 mb-1 uppercase tracking-wider">
-                  <span>XP REWARD</span>
-                  <span className="text-brand-purple font-bold">+{xpReward} XP</span>
+                <div className="flex justify-between text-[10px] font-bold font-mono text-brand-purple mb-1.5 uppercase tracking-widest">
+                  <span>[QUEST REWARD XP]</span>
+                  <span className="text-brand-purple glow-text-purple">+{xpReward} XP</span>
                 </div>
                 <input
                   type="range"
-                  min="20"
-                  max="500"
-                  step="10"
+                  min="5"
+                  max="30"
+                  step="1"
                   value={xpReward}
                   onChange={(e) => setXpReward(Number(e.target.value))}
-                  disabled={isLimitReached || loading}
+                  disabled={isLimitReached || loadingStatus !== null}
                   className="w-full accent-brand-purple cursor-pointer"
                 />
+                <p className="text-[9px] text-gray-500 font-mono mt-1.5 uppercase tracking-wide leading-relaxed">
+                  [SYSTEM NOTE: CUSTOM TRIALS CAPPED TO A MAXIMUM OF 30 XP TO REGULATE POWER BALANCE COORDINATES.]
+                </p>
               </div>
 
-              <div className="flex items-center gap-2 pt-2">
+              <div className="flex items-center gap-2 pt-1">
                 <input
                   type="checkbox"
                   id="proofRequired"
                   checked={proofRequired}
                   onChange={(e) => setProofRequired(e.target.checked)}
-                  disabled={isLimitReached || loading}
+                  disabled={isLimitReached || loadingStatus !== null}
                   className="w-4 h-4 rounded bg-slate-950 border-slate-800 text-brand-purple focus:ring-0 cursor-pointer"
                 />
                 <label 
                   htmlFor="proofRequired" 
-                  className="text-xs text-gray-400 font-mono select-none cursor-pointer uppercase tracking-wider"
+                  className="text-[10px] font-bold text-gray-400 font-mono select-none cursor-pointer uppercase tracking-widest"
                 >
-                  Require Image Proof
+                  [REQUIRE VERIFIED PROOF LOG]
                 </label>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2.5 pt-2">
                 {editingQuestId && (
                   <button
                     type="button"
                     onClick={handleCancelEdit}
-                    disabled={loading}
+                    disabled={loadingStatus !== null}
                     className="flex-1 py-3 border border-slate-800 hover:border-slate-700 bg-slate-900/50 hover:bg-slate-900 text-gray-400 hover:text-white font-extrabold font-mono text-xs uppercase rounded-lg tracking-wider transition-all cursor-pointer disabled:opacity-50"
                   >
                     Cancel
@@ -291,15 +369,15 @@ export default function QuestsManager({
                 )}
                 <button
                   type="submit"
-                  disabled={(!editingQuestId && isLimitReached) || loading}
+                  disabled={(!editingQuestId && isLimitReached) || loadingStatus !== null}
                   className="flex-[2] py-3 bg-brand-purple hover:bg-[#906ef6] text-white font-extrabold font-mono text-xs uppercase rounded-lg tracking-wider transition-all glow-purple disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  {loading ? (
+                  {loadingStatus !== null ? (
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                   ) : (
                     <>
                       {editingQuestId ? <Zap size={14} /> : <Plus size={14} />} 
-                      {editingQuestId ? 'Update Quest' : 'Forge Quest'}
+                      {editingQuestId ? 'Update Trial' : 'Forge Objective'}
                     </>
                   )}
                 </button>
@@ -381,35 +459,35 @@ export default function QuestsManager({
       </div>
       </div>
 
-      {/* Forging Quest Loading Overlay */}
+      {/* Dynamic System Loading Overlay */}
       <AnimatePresence>
-        {loading && (
-          <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md font-mono text-gray-200">
+        {loadingStatus !== null && (
+          <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md font-mono text-gray-200 animate-fade-in">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="relative p-8 border-2 border-brand-purple rounded-lg bg-[#02050c]/95 max-w-sm w-full text-center glow-purple"
+              className={`relative p-8 border-2 ${loadingConfig.borderColor} rounded-lg bg-[#02050c]/95 max-w-sm w-full text-center ${loadingConfig.glowClass}`}
             >
               {/* Brackets */}
-              <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-brand-purple" />
-              <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-brand-purple" />
-              <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-brand-purple" />
-              <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-brand-purple" />
+              <div className={`absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 ${loadingConfig.borderColor}`} />
+              <div className={`absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 ${loadingConfig.borderColor}`} />
+              <div className={`absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 ${loadingConfig.borderColor}`} />
+              <div className={`absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 ${loadingConfig.borderColor}`} />
 
               {/* Glowing Icon */}
               <div className="flex items-center justify-center gap-2 mb-4">
-                <span className="w-2.5 h-2.5 rounded-full animate-ping bg-brand-purple" />
-                <span className="text-[10px] font-black tracking-widest uppercase text-brand-purple">
-                  [ SYSTEM STATUS: FORGING TRIAL ]
+                <span className={`w-2.5 h-2.5 rounded-full animate-ping ${loadingConfig.dotBg}`} />
+                <span className={`text-[10px] font-black tracking-widest uppercase ${loadingConfig.loaderColor}`}>
+                  {loadingConfig.tag}
                 </span>
               </div>
 
-              <h3 className="text-sm font-black tracking-widest text-white uppercase mb-2 animate-pulse">
-                {editingQuestId ? 'UPDATING TRIAL COORDINATES...' : 'FORGING QUEST IN THE COMPASS...'}
+              <h3 className="text-sm font-black tracking-widest text-white uppercase mb-2 animate-pulse font-mono">
+                {loadingConfig.title}
               </h3>
-              <p className="text-[9px] text-gray-400 uppercase leading-relaxed mb-6">
-                Recalibrating quest objectives parameters and status benefits. Please hold position.
+              <p className="text-[9px] text-gray-400 uppercase leading-relaxed mb-6 font-mono">
+                {loadingConfig.description}
               </p>
 
               <div className="w-full h-2 bg-slate-950 border border-slate-900 rounded-full overflow-hidden">
@@ -417,12 +495,73 @@ export default function QuestsManager({
                   initial={{ width: "0%" }}
                   animate={{ width: "100%" }}
                   transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                  className="h-full bg-gradient-to-r from-brand-purple to-violet-500"
+                  className={`h-full bg-gradient-to-r ${loadingConfig.progressGrad}`}
                 />
               </div>
 
-              <div className="mt-6 text-[9px] text-gray-500 uppercase tracking-widest">
+              <div className="mt-6 text-[9px] text-gray-500 uppercase tracking-widest font-mono">
                 [ TRANSMISSION SYNC RATE: SECURE ]
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {questIdToDelete && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setQuestIdToDelete(null)}
+              className="absolute inset-0 bg-black/85 backdrop-blur-sm"
+            />
+
+            {/* Modal Box */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative p-6 border-2 border-brand-red rounded-lg bg-[#02050c]/98 max-w-sm w-full text-center shadow-[0_0_30px_rgba(239,68,68,0.25)] font-mono text-gray-200 z-10"
+            >
+              {/* Brackets */}
+              <div className="absolute top-0 left-0 w-3.5 h-3.5 border-t-2 border-l-2 border-brand-red" />
+              <div className="absolute top-0 right-0 w-3.5 h-3.5 border-t-2 border-r-2 border-brand-red" />
+              <div className="absolute bottom-0 left-0 w-3.5 h-3.5 border-b-2 border-l-2 border-brand-red" />
+              <div className="absolute bottom-0 right-0 w-3.5 h-3.5 border-b-2 border-r-2 border-brand-red" />
+
+              <div className="flex justify-center mb-3 text-brand-red animate-pulse">
+                <AlertTriangle size={32} />
+              </div>
+
+              <h3 className="text-xs font-black tracking-widest text-brand-red glow-text-red uppercase mb-2">
+                [ SYSTEM DIRECTIVE PURGE ]
+              </h3>
+              
+              <p className="text-xs text-gray-300 uppercase tracking-wide leading-relaxed mb-6 font-semibold">
+                Are you sure you want to delete this custom quest? This action will permanently remove it from your trials deck.
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setQuestIdToDelete(null)}
+                  className="flex-1 py-2.5 border border-slate-800 hover:border-slate-700 bg-slate-900/50 hover:bg-slate-900 text-gray-400 hover:text-white font-extrabold font-mono text-[10px] uppercase rounded tracking-wider transition-all cursor-pointer"
+                >
+                  [ ABORT ]
+                </button>
+                <button
+                  onClick={async () => {
+                    const id = questIdToDelete
+                    setQuestIdToDelete(null)
+                    await performDelete(id)
+                  }}
+                  className="flex-1 py-2.5 bg-brand-red hover:bg-red-700 text-white font-extrabold font-mono text-[10px] uppercase rounded tracking-wider transition-all glow-red cursor-pointer"
+                >
+                  [ CONFIRM PURGE ]
+                </button>
               </div>
             </motion.div>
           </div>

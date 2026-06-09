@@ -28,7 +28,7 @@ export default function Loading() {
 
         {/* Main holographic message */}
         <h3 className="text-sm font-black tracking-widest text-white uppercase animate-pulse">
-          Synchronizing Hunter Data...
+          hunter data fetching...
         </h3>
 
         {/* Loader Spinner */}

@@ -54,7 +54,7 @@ export default async function LeaderboardPage() {
           </h2>
         </div>
 
-        <div className="relative">
+        <div className={`relative ${!isPro ? 'min-h-[350px]' : ''}`}>
           {/* Blurred Table Container for Free Users */}
           <div className={!isPro ? "blur-md select-none pointer-events-none filter" : ""}>
             {error || !topHunters || topHunters.length === 0 ? (
@@ -146,29 +146,36 @@ export default async function LeaderboardPage() {
 
           {/* Locked Notification Overlay Card */}
           {!isPro && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-slate-950/20 backdrop-blur-[2px] rounded-xl">
-              <div className="max-w-md w-full bg-[#02050c]/98 border-2 border-brand-gold rounded-lg p-6 text-center shadow-2xl glow-gold relative overflow-hidden">
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-slate-950/60 backdrop-blur-[6px] rounded-xl z-20">
+              <div className="max-w-md w-full bg-[#030712]/98 border-2 border-brand-red rounded-lg p-8 text-center shadow-[0_0_30px_rgba(239,68,68,0.3)] relative overflow-hidden">
                 {/* Tech Bracket Corners */}
-                <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-brand-gold" />
-                <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-brand-gold" />
-                <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-brand-gold" />
-                <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-brand-gold" />
+                <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-brand-red" />
+                <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-brand-red" />
+                <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-brand-red" />
+                <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-brand-red" />
 
-                <ShieldAlert className="mx-auto text-brand-gold animate-pulse mb-3.5" size={32} />
+                <div className="flex justify-center mb-4">
+                  <span className="relative flex h-10 w-10">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500/50 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-10 w-10 bg-brand-red/10 border border-brand-red flex items-center justify-center">
+                      <ShieldAlert className="text-brand-red animate-pulse" size={20} />
+                    </span>
+                  </span>
+                </div>
                 
-                <h3 className="text-xs font-black tracking-widest text-brand-gold glow-text-gold uppercase mb-2">
-                  [ ACCESS PERMISSION REQUIRED ]
+                <h3 className="text-xs font-black tracking-widest text-brand-red glow-text-red uppercase mb-3 font-mono">
+                  [ SYSTEM ACCESS RESTRICTED ]
                 </h3>
                 
-                <p className="text-[10px] text-gray-300 font-mono uppercase tracking-wide leading-relaxed mb-6">
-                  Warning: Leaderboard clearance coordinates are restricted. Only PRO hunters have registry access permissions. Awaken your profile status credentials to view global rankings.
+                <p className="text-xs text-gray-300 font-mono lowercase tracking-wide leading-relaxed mb-6 font-semibold">
+                  upgrade to pro to view your leadership position.
                 </p>
 
                 <a
                   href="/upgrade"
-                  className="inline-block w-full py-3 bg-brand-gold hover:bg-yellow-400 text-black font-black text-[10px] uppercase tracking-widest rounded transition-all glow-gold"
+                  className="inline-block w-full py-3 bg-brand-red hover:bg-red-700 text-white font-black text-xs uppercase tracking-widest rounded transition-all glow-red font-mono"
                 >
-                  AWAKEN PRO
+                  AWAKEN PRO STATUS
                 </a>
               </div>
             </div>

@@ -150,6 +150,7 @@ export async function completeDailyQuest(questId: string, proofImageUrl: string 
   }
 
   revalidatePath('/')
+  revalidatePath('/dashboard')
   revalidatePath('/profile')
   revalidatePath('/stats')
 
@@ -289,6 +290,7 @@ export async function completeCustomQuest(questId: string, proofImageUrl: string
   }
 
   revalidatePath('/my-quests')
+  revalidatePath('/dashboard')
   revalidatePath('/')
   revalidatePath('/profile')
   revalidatePath('/stats')
@@ -319,7 +321,7 @@ export async function addCustomQuest(
 
   // Validate inputs
   if (!title || title.trim().length === 0) return { error: 'Title is required.' }
-  if (xpReward < 20 || xpReward > 500) return { error: 'XP reward must be between 20 and 500.' }
+  if (xpReward < 5 || xpReward > 30) return { error: 'XP reward must be between 5 and 30.' }
 
   // Check profile Pro status
   const { data: profile } = await supabase
@@ -357,31 +359,49 @@ export async function addCustomQuest(
 
   if (error) return { error: error.message }
 
-  // When first custom daily quest is added, generate today's real daily quests from it
+  // Sync today's daily_quests list if this is a daily quest
   if (repeatType === 'daily') {
     const today = new Date().toISOString().split('T')[0]
 
-    // Only generate if none exist for today yet (no claimed examples that got saved)
+    // Fetch existing daily quests for today
     const { data: todayQuests } = await supabase
       .from('daily_quests')
       .select('id')
       .eq('user_id', user.id)
       .eq('date', today)
 
-    if (!todayQuests || todayQuests.length === 0) {
-      const { data: latestProfile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
+    // Fetch latest profile for streak check
+    const { data: latestProfile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single()
 
-      if (latestProfile) {
+    if (latestProfile) {
+      if (!todayQuests || todayQuests.length === 0) {
+        // First custom daily quest: generate today's daily quests from it
         await generateDailyQuests(latestProfile)
+      } else {
+        // Daily quests already generated: insert today's copy of this new quest directly
+        let finalXP = xpReward
+        if (latestProfile.streak_days > 0) {
+          finalXP = Math.floor(xpReward * 1.15)
+        }
+        await supabase.from('daily_quests').insert({
+          user_id: user.id,
+          date: today,
+          title,
+          description,
+          stat_category: statCategory,
+          xp_reward: finalXP,
+          completed: false,
+        })
       }
     }
   }
 
   revalidatePath('/my-quests')
+  revalidatePath('/dashboard')
   revalidatePath('/')
   return { success: true }
 }
@@ -395,10 +415,12 @@ export async function deleteCustomQuest(questId: string) {
   // Fetch the quest details before updating
   const { data: quest } = await supabase
     .from('custom_quests')
-    .select('repeat_type')
+    .select('repeat_type, title')
     .eq('id', questId)
     .eq('user_id', user.id)
     .single()
+
+  if (!quest) return { error: 'Quest not found.' }
 
   const { error } = await supabase
     .from('custom_quests')
@@ -408,7 +430,52 @@ export async function deleteCustomQuest(questId: string) {
 
   if (error) return { error: error.message }
 
+  // Sync today's daily_quests copy if it was a daily quest
+  if (quest.repeat_type === 'daily') {
+    const today = new Date().toISOString().split('T')[0]
+
+    // Count remaining active daily custom quests
+    const { count } = await supabase
+      .from('custom_quests')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('active', true)
+      .eq('repeat_type', 'daily')
+
+    const activeDailyCount = count ?? 0
+
+    if (activeDailyCount === 0) {
+      // Revert back to system examples
+      const { data: todayQuests } = await supabase
+        .from('daily_quests')
+        .select('id, completed')
+        .eq('user_id', user.id)
+        .eq('date', today)
+
+      const anyCompleted = todayQuests?.some(q => q.completed)
+      if (todayQuests && todayQuests.length > 0 && !anyCompleted) {
+        await supabase.from('daily_quests').delete().eq('user_id', user.id).eq('date', today)
+        const { data: latestProfile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+        if (latestProfile) await generateDailyQuests(latestProfile)
+      }
+    } else {
+      // Delete today's copy of this deleted daily quest if it was not completed
+      const { data: todayCopy } = await supabase
+        .from('daily_quests')
+        .select('id, completed')
+        .eq('user_id', user.id)
+        .eq('date', today)
+        .eq('title', quest.title)
+        .maybeSingle()
+
+      if (todayCopy && !todayCopy.completed) {
+        await supabase.from('daily_quests').delete().eq('id', todayCopy.id)
+      }
+    }
+  }
+
   revalidatePath('/my-quests')
+  revalidatePath('/dashboard')
   revalidatePath('/')
   return { success: true }
 }
@@ -429,7 +496,7 @@ export async function editCustomQuest(
 
   // Validate inputs
   if (!title || title.trim().length === 0) return { error: 'Title is required.' }
-  if (xpReward < 20 || xpReward > 500) return { error: 'XP reward must be between 20 and 500.' }
+  if (xpReward < 5 || xpReward > 30) return { error: 'XP reward must be between 5 and 30.' }
 
   // Fetch the original quest details
   const { data: originalQuest } = await supabase
@@ -470,6 +537,18 @@ export async function editCustomQuest(
       .eq('title', originalQuest.title)
       .maybeSingle()
 
+    // Fetch profile for streak calculations
+    const { data: latestProfile } = await supabase
+      .from('profiles')
+      .select('streak_days')
+      .eq('id', user.id)
+      .single()
+
+    let finalXP = xpReward
+    if (latestProfile && latestProfile.streak_days > 0) {
+      finalXP = Math.floor(xpReward * 1.15)
+    }
+
     if (todayCopy && !todayCopy.completed) {
       // Update today's copy
       await supabase
@@ -478,18 +557,20 @@ export async function editCustomQuest(
           title,
           description,
           stat_category: statCategory,
-          xp_reward: xpReward,
+          xp_reward: finalXP,
         })
         .eq('id', todayCopy.id)
     } else if (!todayCopy) {
       // If it became daily (changed from e.g. weekly to daily), check if this is now the first custom daily quest.
       // If so, replace system examples immediately!
-      const { count: activeDailyCount } = await supabase
+      const { count } = await supabase
         .from('custom_quests')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .eq('active', true)
         .eq('repeat_type', 'daily')
+
+      const activeDailyCount = count ?? 0
 
       if (activeDailyCount === 1) {
         const { data: todayQuests } = await supabase
@@ -501,9 +582,20 @@ export async function editCustomQuest(
         const anyCompleted = todayQuests?.some(q => q.completed)
         if (todayQuests && todayQuests.length > 0 && !anyCompleted) {
           await supabase.from('daily_quests').delete().eq('user_id', user.id).eq('date', today)
-          const { data: latestProfile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-          if (latestProfile) await generateDailyQuests(latestProfile)
+          const { data: latestFullProfile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+          if (latestFullProfile) await generateDailyQuests(latestFullProfile)
         }
+      } else if (activeDailyCount > 1) {
+        // Insert today's copy directly
+        await supabase.from('daily_quests').insert({
+          user_id: user.id,
+          date: today,
+          title,
+          description,
+          stat_category: statCategory,
+          xp_reward: finalXP,
+          completed: false,
+        })
       }
     }
   } else if (originalQuest.repeat_type === 'daily') {
@@ -546,6 +638,8 @@ export async function editCustomQuest(
   }
 
   revalidatePath('/my-quests')
+  revalidatePath('/dashboard')
+  revalidatePath('/')
   return { success: true }
 }
 
@@ -677,6 +771,7 @@ export async function claimExampleQuest(
   }
 
   revalidatePath('/')
+  revalidatePath('/dashboard')
   revalidatePath('/profile')
   revalidatePath('/stats')
 
