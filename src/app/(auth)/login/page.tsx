@@ -25,34 +25,55 @@ export default function LoginPage() {
       setLoading(false)
     } else {
       router.refresh()
-      router.push('/')
+      router.push('/dashboard')
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-12 sm:px-6 lg:px-8">
-      {/* Background Glow */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(0,240,255,0.05),transparent)] pointer-events-none" />
+    <div className="flex min-h-screen items-center justify-center bg-[#02050c] px-4 py-16 font-mono relative overflow-hidden">
+      {/* Background Hologram scanlines */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(18,24,38,0.25)_1px,transparent_1px),linear-gradient(90deg,rgba(18,24,38,0.25)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none" />
+      
+      {/* Laser line moving */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <motion.div
+          initial={{ y: '-100%' }}
+          animate={{ y: '100%' }}
+          transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
+          className="w-full h-0.5 bg-brand-blue/20 blur-xs"
+        />
+      </div>
 
       <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="w-full max-w-md space-y-8 bg-[#0b0f19] border border-brand-blue/30 rounded-xl p-8 shadow-2xl glow-blue"
+        initial={{ opacity: 0, scale: 0.96, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="w-full max-w-md space-y-8 bg-[#02050c]/98 border-2 border-brand-blue rounded-lg p-8 shadow-2xl glow-blue relative"
       >
+        {/* Tech Corner Brackets */}
+        <div className="absolute top-0 left-0 w-5 h-5 border-t-4 border-l-4 border-brand-blue" />
+        <div className="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-brand-blue" />
+        <div className="absolute bottom-0 left-0 w-5 h-5 border-b-4 border-l-4 border-brand-blue" />
+        <div className="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-brand-blue" />
+
+        <div className="text-left text-[9px] text-brand-blue/50 tracking-widest border-b border-brand-blue/20 pb-2 uppercase select-none">
+          [ ACCESS CONTROLLER - BIND SIGNATURE ]
+        </div>
+
         <div className="text-center">
           <motion.div
             animate={{ scale: [1, 1.05, 1] }}
             transition={{ repeat: Infinity, duration: 3 }}
-            className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-brand-blue bg-slate-900 text-brand-blue glow-blue"
+            className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-brand-blue bg-slate-950 text-brand-blue glow-blue"
           >
-            <ShieldAlert size={32} />
+            <ShieldAlert size={28} />
           </motion.div>
-          <h2 className="mt-6 text-3xl font-extrabold font-mono tracking-widest text-brand-blue glow-text-blue">
+          
+          <h2 className="mt-4 text-2xl font-black tracking-widest text-brand-blue glow-text-blue uppercase">
             SYSTEM ACCESS
           </h2>
-          <p className="mt-2 text-sm text-gray-400">
-            Acknowledge the program, Hunter.
+          <p className="mt-2 text-xs text-gray-400 uppercase tracking-wider">
+            Authorize Hunter Signature Coordinates.
           </p>
         </div>
 
@@ -60,48 +81,46 @@ export default function LoginPage() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="p-3 bg-red-950/20 border border-brand-red/50 rounded-lg text-brand-red text-xs text-center font-mono"
+            className="p-3 bg-red-950/20 border-2 border-brand-red/50 rounded text-brand-red text-xs text-center font-bold uppercase"
           >
             {error}
           </motion.div>
         )}
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+        <form className="mt-6 space-y-6 text-left" onSubmit={handleSubmit}>
           <div className="space-y-4">
+            {/* Email */}
             <div>
-              <label htmlFor="email" className="sr-only">
-                Email address
-              </label>
+              <label className="block text-[10px] text-gray-400 mb-1.5 uppercase tracking-wider font-bold">Email address</label>
               <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
-                  <Mail size={16} />
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-500">
+                  <Mail size={14} />
                 </div>
                 <input
                   id="email"
                   name="email"
                   type="email"
                   required
-                  className="block w-full rounded-lg bg-slate-950 border border-slate-800 py-3 pl-10 pr-3 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue text-sm"
-                  placeholder="Enter hunter email"
+                  className="block w-full rounded bg-slate-950 border-2 border-slate-900 py-3.5 pl-11 pr-3 text-white placeholder-gray-800 focus:outline-none focus:border-brand-blue text-sm"
+                  placeholder="hunter_email@coordinates.com"
                 />
               </div>
             </div>
 
+            {/* Password */}
             <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
+              <label className="block text-[10px] text-gray-400 mb-1.5 uppercase tracking-wider font-bold">Secret Access Key</label>
               <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
-                  <Lock size={16} />
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-500">
+                  <Lock size={14} />
                 </div>
                 <input
                   id="password"
                   name="password"
                   type="password"
                   required
-                  className="block w-full rounded-lg bg-slate-950 border border-slate-800 py-3 pl-10 pr-3 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue text-sm"
-                  placeholder="Enter credentials"
+                  className="block w-full rounded bg-slate-950 border-2 border-slate-900 py-3.5 pl-11 pr-3 text-white placeholder-gray-800 focus:outline-none focus:border-brand-blue text-sm"
+                  placeholder="Enter credential keys"
                 />
               </div>
             </div>
@@ -111,22 +130,22 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="group relative flex w-full justify-center rounded-lg bg-brand-blue hover:bg-[#00d0dd] py-3 text-sm font-extrabold font-mono text-black uppercase tracking-wider transition-all glow-blue disabled:opacity-50 cursor-pointer"
+              className="group relative flex w-full justify-center rounded bg-brand-blue hover:bg-[#00d0dd] py-3.5 text-xs font-black text-black uppercase tracking-widest transition-all glow-blue disabled:opacity-50 cursor-pointer border-none"
             >
               {loading ? (
-                <span className="h-5 w-5 animate-spin rounded-full border-2 border-black border-t-transparent" />
+                <span className="h-4 w-4 animate-spin rounded-full border border-black border-t-transparent" />
               ) : (
                 <span className="flex items-center gap-2">
-                  Initialize Sync <LogIn size={16} />
+                  Initialize Sync <LogIn size={14} />
                 </span>
               )}
             </button>
           </div>
         </form>
 
-        <div className="text-center text-xs text-gray-400 font-mono">
-          <span>Unregistered Hunter? </span>
-          <Link href="/signup" className="text-brand-purple hover:underline glow-text-purple">
+        <div className="text-center text-[10px] text-gray-400 pt-4 border-t border-slate-900 flex justify-between items-center select-none uppercase tracking-wider">
+          <span>Unregistered Hunter?</span>
+          <Link href="/" className="text-brand-purple hover:underline font-bold">
             Create Profile
           </Link>
         </div>
