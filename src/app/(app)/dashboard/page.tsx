@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import DashboardHub from '@/components/DashboardHub'
 import { getProfile } from '@/app/actions/profile'
-import { generateDailyQuests, checkAndRunDailyReset } from '@/lib/quests-generator'
+import { checkAndRunDailyReset } from '@/lib/quests-generator'
 import { Profile } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -23,7 +23,7 @@ export default async function DashboardPage() {
     redirect('/login')
   }
 
-  // 3. Run self-healing daily reset coordinates evaluations
+  // 3. Run self-healing daily reset evaluations
   await checkAndRunDailyReset(profile as Profile)
 
   // Refetch profile to get the up-to-date stats/levels after resets
@@ -31,49 +31,35 @@ export default async function DashboardPage() {
 
   const today = new Date().toISOString().split('T')[0]
 
-  // 3. Fetch daily quests
-  let { data: dailyQuests } = await supabase
-    .from('daily_quests')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('date', today)
-    .order('created_at', { ascending: true })
-
-  // 4. On-the-fly generator fallback if empty
-  if (!dailyQuests || dailyQuests.length === 0) {
-    await generateDailyQuests(profile as Profile)
-    // Refetch
-    const { data: refetchedQuests } = await supabase
+  // 4. Fetch actual daily quests (from custom daily quests, if any)
+  //    If empty → DashboardHub will show client-side example quests
+  const [dailyQuestsResult, customQuestsResult, notificationsResult] = await Promise.all([
+    supabase
       .from('daily_quests')
       .select('*')
       .eq('user_id', user.id)
       .eq('date', today)
-      .order('created_at', { ascending: true })
-    dailyQuests = refetchedQuests || []
-  }
-
-  // 5. Fetch custom active quests
-  const { data: customQuests } = await supabase
-    .from('custom_quests')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('active', true)
-    .order('created_at', { ascending: false })
-
-  // 6. Fetch relevant system notifications (broadcast or user-specific)
-  const { data: notifications } = await supabase
-    .from('admin_notifications')
-    .select('*')
-    .or(`user_id.is.null,user_id.eq.${user.id}`)
-    .order('created_at', { ascending: false })
-    .limit(3)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('custom_quests')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('active', true)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('admin_notifications')
+      .select('*')
+      .or(`user_id.is.null,user_id.eq.${user.id}`)
+      .order('created_at', { ascending: false })
+      .limit(3),
+  ])
 
   return (
     <DashboardHub
       profile={profile as Profile}
-      dailyQuests={dailyQuests || []}
-      customQuests={customQuests || []}
-      notifications={notifications || []}
+      dailyQuests={dailyQuestsResult.data || []}
+      customQuests={customQuestsResult.data || []}
+      notifications={notificationsResult.data || []}
     />
   )
 }

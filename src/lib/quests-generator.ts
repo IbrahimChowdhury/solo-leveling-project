@@ -63,64 +63,27 @@ export async function generateDailyQuests(profile: Profile) {
     .eq('active', true)
     .eq('repeat_type', 'daily')
 
-  let questsToInsert = []
-
-  if (activeCustomDailyQuests && activeCustomDailyQuests.length > 0) {
-    // Generate daily quests from their custom daily quests templates
-    questsToInsert = activeCustomDailyQuests.map(cq => {
-      let xpReward = cq.xp_reward
-      if (profile.streak_days > 0) {
-        xpReward = Math.floor(xpReward * 1.15)
-      }
-      return {
-        user_id: profile.id,
-        date: today,
-        title: cq.title,
-        description: cq.description,
-        stat_category: cq.stat_category,
-        xp_reward: xpReward,
-        completed: false,
-      }
-    })
-  } else {
-    // Generate 3 system default example daily quests (XP range 20-30)
-    const EXAMPLE_QUESTS = [
-      { 
-        title: 'System Daily Warm-up', 
-        description: 'Complete 10 minutes of light physical stretching or warmup exercises to harden basic muscle fibers.', 
-        stat_category: 'endurance', 
-        xp_reward: 20 
-      },
-      { 
-        title: 'Mental Focus Exercise', 
-        description: 'Dedicate 15 minutes of uninterrupted reading, technical coding, or logical challenge training.', 
-        stat_category: 'intelligence', 
-        xp_reward: 25 
-      },
-      { 
-        title: 'Hydration & Vitality Protocol', 
-        description: 'Consume at least 2 liters of pure water and check status coordinates configurations.', 
-        stat_category: 'stamina', 
-        xp_reward: 20 
-      },
-    ]
-
-    questsToInsert = EXAMPLE_QUESTS.map(eq => {
-      let xpReward = eq.xp_reward
-      if (profile.streak_days > 0) {
-        xpReward = Math.floor(xpReward * 1.15)
-      }
-      return {
-        user_id: profile.id,
-        date: today,
-        title: eq.title,
-        description: eq.description,
-        stat_category: eq.stat_category,
-        xp_reward: xpReward,
-        completed: false,
-      }
-    })
+  // No custom daily quests — return empty (example quests shown client-side)
+  if (!activeCustomDailyQuests || activeCustomDailyQuests.length === 0) {
+    return []
   }
+
+  // Generate daily quests from their custom daily quests templates
+  const questsToInsert = activeCustomDailyQuests.map(cq => {
+    let xpReward = cq.xp_reward
+    if (profile.streak_days > 0) {
+      xpReward = Math.floor(xpReward * 1.15)
+    }
+    return {
+      user_id: profile.id,
+      date: today,
+      title: cq.title,
+      description: cq.description,
+      stat_category: cq.stat_category,
+      xp_reward: xpReward,
+      completed: false,
+    }
+  })
 
   const { data, error } = await adminDb
     .from('daily_quests')

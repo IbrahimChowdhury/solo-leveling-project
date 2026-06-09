@@ -2,8 +2,9 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { processXP } from '@/lib/game'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { generateDailyQuests } from '@/lib/quests-generator'
+import type { StatCategory } from '@/types'
 
 export async function getDailyQuests() {
   const supabase = await createClient()
@@ -356,47 +357,35 @@ export async function addCustomQuest(
 
   if (error) return { error: error.message }
 
-  // If new quest is daily, and it is the first daily quest, trigger regeneration to clear examples immediately
+  // When first custom daily quest is added, generate today's real daily quests from it
   if (repeatType === 'daily') {
-    const { count: activeDailyCount } = await supabase
-      .from('custom_quests')
-      .select('*', { count: 'exact', head: true })
+    const today = new Date().toISOString().split('T')[0]
+
+    // Only generate if none exist for today yet (no claimed examples that got saved)
+    const { data: todayQuests } = await supabase
+      .from('daily_quests')
+      .select('id')
       .eq('user_id', user.id)
-      .eq('active', true)
-      .eq('repeat_type', 'daily')
+      .eq('date', today)
 
-    if (activeDailyCount === 1) {
-      const today = new Date().toISOString().split('T')[0]
-      const { data: todayQuests } = await supabase
-        .from('daily_quests')
-        .select('id, completed')
-        .eq('user_id', user.id)
-        .eq('date', today)
+    if (!todayQuests || todayQuests.length === 0) {
+      const { data: latestProfile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
 
-      const anyCompleted = todayQuests?.some(q => q.completed)
-      if (todayQuests && todayQuests.length > 0 && !anyCompleted) {
-        await supabase
-          .from('daily_quests')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('date', today)
-
-        const { data: latestProfile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-        
-        if (latestProfile) {
-          await generateDailyQuests(latestProfile)
-        }
+      if (latestProfile) {
+        await generateDailyQuests(latestProfile)
       }
     }
   }
 
   revalidatePath('/my-quests')
+  revalidatePath('/')
   return { success: true }
 }
+
 
 export async function deleteCustomQuest(questId: string) {
   const supabase = await createClient()
@@ -419,50 +408,11 @@ export async function deleteCustomQuest(questId: string) {
 
   if (error) return { error: error.message }
 
-  // If deleting a daily quest, check if we have 0 custom daily quests remaining
-  if (quest && quest.repeat_type === 'daily') {
-    const { count: activeDailyCount } = await supabase
-      .from('custom_quests')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('active', true)
-      .eq('repeat_type', 'daily')
-
-    if (activeDailyCount === 0) {
-      // Revert back to the 3 system example quests if today's daily quests are not completed
-      const today = new Date().toISOString().split('T')[0]
-      const { data: todayQuests } = await supabase
-        .from('daily_quests')
-        .select('id, completed')
-        .eq('user_id', user.id)
-        .eq('date', today)
-
-      const anyCompleted = todayQuests?.some(q => q.completed)
-      if (todayQuests && todayQuests.length > 0 && !anyCompleted) {
-        // Delete today's custom daily quests copies
-        await supabase
-          .from('daily_quests')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('date', today)
-
-        // Regenerate daily quests to bring back system examples
-        const { data: latestProfile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-        
-        if (latestProfile) {
-          await generateDailyQuests(latestProfile)
-        }
-      }
-    }
-  }
-
   revalidatePath('/my-quests')
+  revalidatePath('/')
   return { success: true }
 }
+
 
 export async function editCustomQuest(
   questId: string,
@@ -598,3 +548,147 @@ export async function editCustomQuest(
   revalidatePath('/my-quests')
   return { success: true }
 }
+
+export async function claimExampleQuest(
+  title: string,
+  description: string,
+  statCategory: StatCategory,
+  xpReward: number
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
+  // Fetch user profile
+  const { data: profile, error: pError } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+
+  if (pError || !profile) return { error: 'Profile not found.' }
+
+  const today = new Date().toISOString().split('T')[0]
+
+  // Check if this example quest was already claimed today (by title + date)
+  const { data: existing } = await supabase
+    .from('daily_quests')
+    .select('id, completed')
+    .eq('user_id', user.id)
+    .eq('date', today)
+    .eq('title', title)
+    .maybeSingle()
+
+  if (existing?.completed) return { error: 'Quest already completed.' }
+
+  // Apply streak XP bonus
+  let finalXP = xpReward
+  if (profile.streak_days > 0) {
+    finalXP = Math.floor(finalXP * 1.15)
+  }
+
+  // Weekend Pro double XP
+  const day = new Date().getUTCDay()
+  const isWeekend = day === 0 || day === 6
+  if (profile.is_pro && isWeekend) {
+    finalXP = finalXP * 2
+  }
+
+  // Stat increase
+  const statIncrease = Math.max(2, Math.min(10, Math.floor(xpReward / 10)))
+  const currentStatValue = profile[statCategory as keyof typeof profile] as number
+  const newStatValue = Math.min(1000, currentStatValue + statIncrease)
+
+  // Level up evaluation
+  const { level: newLevel, xp: newXP, leveledUp, rankedUp, rank: newRank } = processXP(
+    profile.level,
+    profile.total_xp,
+    finalXP
+  )
+
+  // Insert completed quest record into daily_quests
+  const { data: insertedQuest, error: insertError } = await supabase
+    .from('daily_quests')
+    .insert({
+      user_id: user.id,
+      date: today,
+      title,
+      description,
+      stat_category: statCategory,
+      xp_reward: finalXP,
+      completed: true,
+      completed_at: new Date().toISOString(),
+    })
+    .select()
+    .single()
+
+  if (insertError || !insertedQuest) return { error: insertError?.message || 'Failed to save quest.' }
+
+  // Update profile
+  const profileUpdates: Record<string, unknown> = {
+    total_xp: newXP,
+    level: newLevel,
+    rank: newRank,
+    [statCategory]: newStatValue,
+    updated_at: new Date().toISOString(),
+  }
+
+  const { error: profileUpdateError } = await supabase
+    .from('profiles')
+    .update(profileUpdates)
+    .eq('id', user.id)
+
+  if (profileUpdateError) return { error: profileUpdateError.message }
+
+  // Log completion
+  await supabase.from('quest_completions').insert({
+    user_id: user.id,
+    quest_id: insertedQuest.id,
+    quest_type: 'system',
+    xp_gained: finalXP,
+    stat_gained: statCategory,
+    proof_image_url: null,
+  })
+
+  // Log stat history
+  const { data: latestHistory } = await supabase
+    .from('stat_history')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('date', today)
+    .single()
+
+  if (latestHistory) {
+    await supabase
+      .from('stat_history')
+      .update({ [statCategory]: newStatValue })
+      .eq('id', latestHistory.id)
+  } else {
+    await supabase.from('stat_history').insert({
+      user_id: user.id,
+      date: today,
+      attack_power: statCategory === 'attack_power' ? newStatValue : profile.attack_power,
+      intelligence: statCategory === 'intelligence' ? newStatValue : profile.intelligence,
+      endurance: statCategory === 'endurance' ? newStatValue : profile.endurance,
+      stamina: statCategory === 'stamina' ? newStatValue : profile.stamina,
+      exercise: statCategory === 'exercise' ? newStatValue : profile.exercise,
+      skills: statCategory === 'skills' ? newStatValue : profile.skills,
+    })
+  }
+
+  revalidatePath('/')
+  revalidatePath('/profile')
+  revalidatePath('/stats')
+
+  return {
+    success: true,
+    xpGained: finalXP,
+    statGained: statCategory,
+    statIncrease,
+    leveledUp,
+    rankedUp,
+    newLevel,
+    newRank,
+  }
+}
+
