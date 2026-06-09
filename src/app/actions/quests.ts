@@ -1,0 +1,378 @@
+'use server'
+
+import { createClient } from '@/lib/supabase/server'
+import { processXP } from '@/lib/game'
+import { revalidatePath } from 'next/cache'
+
+export async function getDailyQuests() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+
+  const today = new Date().toISOString().split('T')[0]
+
+  const { data: quests, error } = await supabase
+    .from('daily_quests')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('date', today)
+    .order('created_at', { ascending: true })
+
+  if (error) return []
+  return quests
+}
+
+export async function getCustomQuests() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+
+  const { data: quests, error } = await supabase
+    .from('custom_quests')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('active', true)
+    .order('created_at', { ascending: false })
+
+  if (error) return []
+  return quests
+}
+
+export async function completeDailyQuest(questId: string, proofImageUrl: string | null = null) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
+  // 1. Fetch the quest details
+  const { data: quest, error: qError } = await supabase
+    .from('daily_quests')
+    .select('*')
+    .eq('id', questId)
+    .eq('user_id', user.id)
+    .single()
+
+  if (qError || !quest) return { error: 'Quest not found.' }
+  if (quest.completed) return { error: 'Quest already completed.' }
+
+  // 2. Fetch user profile
+  const { data: profile, error: pError } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+
+  if (pError || !profile) return { error: 'Profile not found.' }
+
+  // 3. XP calculation (double on weekends for Pro)
+  let xpGained = quest.xp_reward
+  const day = new Date().getUTCDay()
+  const isWeekend = day === 0 || day === 6 // 0=Sunday, 6=Saturday
+  if (profile.is_pro && isWeekend) {
+    xpGained = quest.xp_reward * 2
+  }
+
+  // 4. Stat increase calculation
+  const statGained = quest.stat_category
+  const statIncrease = Math.max(2, Math.min(10, Math.floor(quest.xp_reward / 10)))
+  const currentStatValue = profile[statGained as keyof typeof profile] as number
+  const newStatValue = Math.min(1000, currentStatValue + statIncrease)
+
+  // 5. Level up evaluation
+  const { level: newLevel, xp: newXP, leveledUp, rankedUp, rank: newRank } = processXP(
+    profile.level,
+    profile.total_xp,
+    xpGained
+  )
+
+  // 6. Update Database in a single transaction (using updates)
+  const profileUpdates: any = {
+    total_xp: newXP,
+    level: newLevel,
+    rank: newRank,
+    [statGained]: newStatValue,
+    updated_at: new Date().toISOString(),
+  }
+
+  const { error: profileUpdateError } = await supabase
+    .from('profiles')
+    .update(profileUpdates)
+    .eq('id', user.id)
+
+  if (profileUpdateError) return { error: profileUpdateError.message }
+
+  // Update Daily Quest completion status
+  await supabase
+    .from('daily_quests')
+    .update({
+      completed: true,
+      completed_at: new Date().toISOString(),
+    })
+    .eq('id', questId)
+
+  // Log completion
+  await supabase.from('quest_completions').insert({
+    user_id: user.id,
+    quest_id: questId,
+    quest_type: 'system',
+    xp_gained: xpGained,
+    stat_gained: statGained,
+    proof_image_url: proofImageUrl,
+  })
+
+  // Log stat history
+  const { data: latestHistory } = await supabase
+    .from('stat_history')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('date', new Date().toISOString().split('T')[0])
+    .single()
+
+  if (latestHistory) {
+    await supabase
+      .from('stat_history')
+      .update({
+        [statGained]: newStatValue,
+      })
+      .eq('id', latestHistory.id)
+  } else {
+    await supabase.from('stat_history').insert({
+      user_id: user.id,
+      date: new Date().toISOString().split('T')[0],
+      attack_power: statGained === 'attack_power' ? newStatValue : profile.attack_power,
+      intelligence: statGained === 'intelligence' ? newStatValue : profile.intelligence,
+      endurance: statGained === 'endurance' ? newStatValue : profile.endurance,
+      stamina: statGained === 'stamina' ? newStatValue : profile.stamina,
+      exercise: statGained === 'exercise' ? newStatValue : profile.exercise,
+      skills: statGained === 'skills' ? newStatValue : profile.skills,
+    })
+  }
+
+  revalidatePath('/')
+  revalidatePath('/profile')
+  revalidatePath('/stats')
+
+  return {
+    success: true,
+    xpGained,
+    statGained,
+    statIncrease,
+    leveledUp,
+    rankedUp,
+    newLevel,
+    newRank,
+  }
+}
+
+export async function completeCustomQuest(questId: string, proofImageUrl: string | null = null) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
+  // 1. Fetch custom quest details
+  const { data: quest, error: qError } = await supabase
+    .from('custom_quests')
+    .select('*')
+    .eq('id', questId)
+    .eq('user_id', user.id)
+    .eq('active', true)
+    .single()
+
+  if (qError || !quest) return { error: 'Quest not found or inactive.' }
+
+  // 2. Fetch user profile
+  const { data: profile, error: pError } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+
+  if (pError || !profile) return { error: 'Profile not found.' }
+
+  // 3. Double XP on weekends for Pro
+  let xpGained = quest.xp_reward
+  const day = new Date().getUTCDay()
+  const isWeekend = day === 0 || day === 6
+  if (profile.is_pro && isWeekend) {
+    xpGained = quest.xp_reward * 2
+  }
+
+  // 4. Stat increase
+  const statGained = quest.stat_category
+  const statIncrease = Math.max(2, Math.min(10, Math.floor(quest.xp_reward / 10)))
+  const currentStatValue = profile[statGained as keyof typeof profile] as number
+  const newStatValue = Math.min(1000, currentStatValue + statIncrease)
+
+  // 5. Process Level Up
+  const { level: newLevel, xp: newXP, leveledUp, rankedUp, rank: newRank } = processXP(
+    profile.level,
+    profile.total_xp,
+    xpGained
+  )
+
+  // 6. Update profile
+  const { error: profileUpdateError } = await supabase
+    .from('profiles')
+    .update({
+      total_xp: newXP,
+      level: newLevel,
+      rank: newRank,
+      [statGained]: newStatValue,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', user.id)
+
+  if (profileUpdateError) return { error: profileUpdateError.message }
+
+  // Update Custom Quest reset times
+  const lastCompletedAt = new Date().toISOString()
+  let nextResetAt = null
+
+  if (quest.repeat_type !== 'one-time') {
+    const nextDate = new Date()
+    if (quest.repeat_type === 'daily') nextDate.setUTCDate(nextDate.getUTCDate() + 1)
+    else if (quest.repeat_type === 'weekly') nextDate.setUTCDate(nextDate.getUTCDate() + 7)
+    else if (quest.repeat_type === 'monthly') nextDate.setUTCMonth(nextDate.getUTCMonth() + 1)
+    else if (quest.repeat_type === 'yearly') nextDate.setUTCFullYear(nextDate.getUTCFullYear() + 1)
+    
+    // Set reset time to midnight of next period
+    nextDate.setUTCHours(0, 0, 0, 0)
+    nextResetAt = nextDate.toISOString()
+  }
+
+  await supabase
+    .from('custom_quests')
+    .update({
+      last_completed_at: lastCompletedAt,
+      next_reset_at: nextResetAt,
+      active: quest.repeat_type !== 'one-time', // set inactive if one-time
+    })
+    .eq('id', questId)
+
+  // Log completion
+  await supabase.from('quest_completions').insert({
+    user_id: user.id,
+    quest_id: questId,
+    quest_type: 'custom',
+    xp_gained: xpGained,
+    stat_gained: statGained,
+    proof_image_url: proofImageUrl,
+  })
+
+  // Log stat history
+  const { data: latestHistory } = await supabase
+    .from('stat_history')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('date', new Date().toISOString().split('T')[0])
+    .single()
+
+  if (latestHistory) {
+    await supabase
+      .from('stat_history')
+      .update({
+        [statGained]: newStatValue,
+      })
+      .eq('id', latestHistory.id)
+  } else {
+    await supabase.from('stat_history').insert({
+      user_id: user.id,
+      date: new Date().toISOString().split('T')[0],
+      attack_power: statGained === 'attack_power' ? newStatValue : profile.attack_power,
+      intelligence: statGained === 'intelligence' ? newStatValue : profile.intelligence,
+      endurance: statGained === 'endurance' ? newStatValue : profile.endurance,
+      stamina: statGained === 'stamina' ? newStatValue : profile.stamina,
+      exercise: statGained === 'exercise' ? newStatValue : profile.exercise,
+      skills: statGained === 'skills' ? newStatValue : profile.skills,
+    })
+  }
+
+  revalidatePath('/my-quests')
+  revalidatePath('/')
+  revalidatePath('/profile')
+  revalidatePath('/stats')
+
+  return {
+    success: true,
+    xpGained,
+    statGained,
+    statIncrease,
+    leveledUp,
+    rankedUp,
+    newLevel,
+    newRank,
+  }
+}
+
+export async function addCustomQuest(
+  title: string,
+  description: string,
+  statCategory: string,
+  xpReward: number,
+  repeatType: 'one-time' | 'daily' | 'weekly' | 'monthly' | 'yearly',
+  proofRequired: boolean
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
+  // Validate inputs
+  if (!title || title.trim().length === 0) return { error: 'Title is required.' }
+  if (xpReward < 20 || xpReward > 500) return { error: 'XP reward must be between 20 and 500.' }
+
+  // Check profile Pro status
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('level, is_pro')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile) return { error: 'Profile not found.' }
+
+  // Check quest limit for Free users
+  if (!profile.is_pro) {
+    const { count, error: countError } = await supabase
+      .from('custom_quests')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('active', true)
+
+    if (countError) return { error: countError.message }
+    if (count && count >= 5) {
+      return { error: 'Free tier limits you to 5 active custom quests. Upgrade to Pro for unlimited quests!' }
+    }
+  }
+
+  // Insert quest
+  const { error } = await supabase.from('custom_quests').insert({
+    user_id: user.id,
+    title,
+    description,
+    stat_category: statCategory,
+    xp_reward: xpReward,
+    repeat_type: repeatType,
+    proof_required: proofRequired,
+    active: true,
+  })
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/my-quests')
+  return { success: true }
+}
+
+export async function deleteCustomQuest(questId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
+  const { error } = await supabase
+    .from('custom_quests')
+    .update({ active: false })
+    .eq('id', questId)
+    .eq('user_id', user.id)
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/my-quests')
+  return { success: true }
+}

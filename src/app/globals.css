@@ -1,26 +1,64 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #030712;
+  --foreground: #f9fafb;
+  --card: #0b0f19;
+  --card-border: #1f2937;
+  --brand-blue: #00f0ff;
+  --brand-purple: #8b5cf6;
+  --brand-gold: #f59e0b;
+  --brand-red: #ef4444;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-border: var(--card-border);
+  --color-brand-blue: var(--brand-blue);
+  --color-brand-purple: var(--brand-purple);
+  --color-brand-gold: var(--brand-gold);
+  --color-brand-red: var(--brand-red);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Solo Leveling neon glow elements */
+.glow-blue {
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+}
+.glow-purple {
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
+}
+.glow-gold {
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
+}
+.glow-text-blue {
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+}
+.glow-text-purple {
+  text-shadow: 0 0 8px rgba(139, 92, 246, 0.6);
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #030712;
+}
+::-webkit-scrollbar-thumb {
+  background: #1f2937;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #374151;
 }
