@@ -46,6 +46,12 @@ body {
 .glow-text-purple {
   text-shadow: 0 0 8px rgba(139, 92, 246, 0.6);
 }
+.glow-red {
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+}
+.glow-text-red {
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
 
 /* Custom scrollbars */
 ::-webkit-scrollbar {

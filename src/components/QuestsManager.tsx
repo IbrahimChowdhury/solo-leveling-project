@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Trash2, Zap, AlertTriangle, CheckCircle, ShieldCheck, Edit3 } from 'lucide-react'
 import { Profile, CustomQuest } from '@/types'
 import { addCustomQuest, deleteCustomQuest, editCustomQuest } from '@/app/actions/quests'
@@ -378,8 +378,56 @@ export default function QuestsManager({
               ))}
             </div>
           )}
-        </div>
       </div>
+      </div>
+
+      {/* Forging Quest Loading Overlay */}
+      <AnimatePresence>
+        {loading && (
+          <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md font-mono text-gray-200">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative p-8 border-2 border-brand-purple rounded-lg bg-[#02050c]/95 max-w-sm w-full text-center glow-purple"
+            >
+              {/* Brackets */}
+              <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-brand-purple" />
+              <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-brand-purple" />
+              <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-brand-purple" />
+              <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-brand-purple" />
+
+              {/* Glowing Icon */}
+              <div className="flex items-center justify-center gap-2 mb-4">
+                <span className="w-2.5 h-2.5 rounded-full animate-ping bg-brand-purple" />
+                <span className="text-[10px] font-black tracking-widest uppercase text-brand-purple">
+                  [ SYSTEM STATUS: FORGING TRIAL ]
+                </span>
+              </div>
+
+              <h3 className="text-sm font-black tracking-widest text-white uppercase mb-2 animate-pulse">
+                {editingQuestId ? 'UPDATING TRIAL COORDINATES...' : 'FORGING QUEST IN THE COMPASS...'}
+              </h3>
+              <p className="text-[9px] text-gray-400 uppercase leading-relaxed mb-6">
+                Recalibrating quest objectives parameters and status benefits. Please hold position.
+              </p>
+
+              <div className="w-full h-2 bg-slate-950 border border-slate-900 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: "0%" }}
+                  animate={{ width: "100%" }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                  className="h-full bg-gradient-to-r from-brand-purple to-violet-500"
+                />
+              </div>
+
+              <div className="mt-6 text-[9px] text-gray-500 uppercase tracking-widest">
+                [ TRANSMISSION SYNC RATE: SECURE ]
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

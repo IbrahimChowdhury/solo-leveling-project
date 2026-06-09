@@ -2,7 +2,7 @@
 
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getRankForLevel } from '@/lib/game'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, unstable_cache, updateTag } from 'next/cache'
 
 async function checkAdminOrThrow() {
   const supabase = await createClient()
@@ -20,8 +20,7 @@ async function checkAdminOrThrow() {
   }
 }
 
-export async function adminGetAllUsers() {
-  await checkAdminOrThrow()
+const fetchAllUsersRaw = async () => {
   const adminDb = createAdminClient()
 
   // Fetch all profiles
@@ -48,6 +47,20 @@ export async function adminGetAllUsers() {
     ...p,
     email: emailMap.get(p.id) || 'N/A',
   }))
+}
+
+const getCachedAllUsers = unstable_cache(
+  async () => fetchAllUsersRaw(),
+  ['admin-users-list'],
+  {
+    tags: ['admin-users-list'],
+    revalidate: 30,
+  }
+)
+
+export async function adminGetAllUsers() {
+  await checkAdminOrThrow()
+  return getCachedAllUsers()
 }
 
 export async function adminUpdateUser(
@@ -85,6 +98,8 @@ export async function adminUpdateUser(
   revalidatePath('/admin')
   revalidatePath('/profile')
   revalidatePath('/')
+  updateTag('admin-users-list')
+  updateTag('admin-analytics-data')
   return { success: true }
 }
 
@@ -97,6 +112,8 @@ export async function adminDeleteUser(userId: string) {
   if (error) throw new Error(error.message)
 
   revalidatePath('/admin')
+  updateTag('admin-users-list')
+  updateTag('admin-analytics-data')
   return { success: true }
 }
 
@@ -132,6 +149,7 @@ export async function adminForceResetUser(userId: string) {
   }
 
   revalidatePath('/')
+  updateTag('admin-analytics-data')
   return { success: true }
 }
 
@@ -148,11 +166,11 @@ export async function adminSendNotification(message: string, userId: string | nu
   if (error) throw new Error(error.message)
 
   revalidatePath('/')
+  updateTag('admin-notifications-list')
   return { success: true }
 }
 
-export async function adminGetAnalytics() {
-  await checkAdminOrThrow()
+const fetchAnalyticsRaw = async () => {
   const adminDb = createAdminClient()
 
   // 1. Total users
@@ -218,6 +236,20 @@ export async function adminGetAnalytics() {
   }
 }
 
+const getCachedAnalytics = unstable_cache(
+  async () => fetchAnalyticsRaw(),
+  ['admin-analytics-data'],
+  {
+    tags: ['admin-analytics-data'],
+    revalidate: 30,
+  }
+)
+
+export async function adminGetAnalytics() {
+  await checkAdminOrThrow()
+  return getCachedAnalytics()
+}
+
 export async function adminRemovePenalty(penaltyId: string) {
   await checkAdminOrThrow()
   const adminDb = createAdminClient()
@@ -268,5 +300,31 @@ export async function adminRemovePenalty(penaltyId: string) {
 
   revalidatePath('/admin')
   revalidatePath('/')
+  updateTag('admin-users-list')
+  updateTag('admin-analytics-data')
   return { success: true }
+}
+
+const fetchNotificationsRaw = async () => {
+  const adminDb = createAdminClient()
+  const { data: notifications } = await adminDb
+    .from('admin_notifications')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(20)
+  return notifications || []
+}
+
+const getCachedNotifications = unstable_cache(
+  async () => fetchNotificationsRaw(),
+  ['admin-notifications-list'],
+  {
+    tags: ['admin-notifications-list'],
+    revalidate: 30,
+  }
+)
+
+export async function adminGetNotifications() {
+  await checkAdminOrThrow()
+  return getCachedNotifications()
 }

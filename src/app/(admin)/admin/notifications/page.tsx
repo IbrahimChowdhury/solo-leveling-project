@@ -1,24 +1,10 @@
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+import { adminGetNotifications } from '@/app/actions/admin'
 import AdminNotificationsForm from '@/components/AdminNotificationsForm'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AdminNotificationsPage() {
-  const supabase = await createClient()
-
-  // 1. Check user auth
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    redirect('/login')
-  }
-
-  // 2. Fetch recent admin notification logs
-  const { data: notifications } = await supabase
-    .from('admin_notifications')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(20)
+  const notifications = await adminGetNotifications()
 
   return (
     <div className="space-y-6">
@@ -31,7 +17,7 @@ export default async function AdminNotificationsPage() {
         </p>
       </div>
 
-      <AdminNotificationsForm notifications={notifications || []} />
+      <AdminNotificationsForm notifications={notifications} />
     </div>
   )
 }
