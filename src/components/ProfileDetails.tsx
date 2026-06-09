@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { motion } from 'framer-motion'
 import { 
   ShieldCheck, 
@@ -12,7 +13,8 @@ import {
   Trophy, 
   CreditCard,
   CheckCircle,
-  HelpCircle
+  HelpCircle,
+  UploadCloud
 } from 'lucide-react'
 import { Profile, Subscription } from '@/types'
 import { updateProfile, usePenaltyShield } from '@/app/actions/profile'
@@ -38,6 +40,77 @@ export default function ProfileDetails({
   const [displayName, setDisplayName] = useState(profile.display_name)
   const [avatarUrl, setAvatarUrl] = useState(profile.avatar_url || '')
   const [isEditing, setIsEditing] = useState(false)
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [uploading, setUploading] = useState(false)
+
+  const handleFileUpload = async (file: File) => {
+    setError(null)
+    setUploading(true)
+    try {
+      const supabase = createClient()
+      
+      if (!file.type.startsWith('image/')) {
+        setError('Only image files are allowed.')
+        return
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        setError('Image must be less than 2MB.')
+        return
+      }
+
+      const fileExt = file.name.split('.').pop()
+      const filePath = `${profile.id}/avatar-${Date.now()}.${fileExt}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        })
+
+      if (uploadError) {
+        throw uploadError
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath)
+
+      setAvatarUrl(publicUrl)
+    } catch (err: any) {
+      console.error('Upload error:', err)
+      setError(`Upload failed: ${err.message || 'Unknown error'}`)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) {
+      await handleFileUpload(file)
+    }
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      await handleFileUpload(file)
+    }
+  }
 
   // XP calculations
   const xpNeeded = getXPForNextLevel(profile.level)
@@ -147,6 +220,52 @@ export default function ProfileDetails({
                   onChange={(e) => setDisplayName(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-lg text-white text-xs focus:outline-none focus:border-brand-blue"
                 />
+              </div>
+              <div>
+                <label className="block text-[10px] font-mono text-gray-400 mb-1.5 uppercase tracking-wider">
+                  Avatar Upload (Drag & Drop or Select)
+                </label>
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2 ${
+                    isDragging
+                      ? 'border-brand-purple bg-brand-purple/10 text-white'
+                      : 'border-slate-800 hover:border-brand-blue/50 bg-slate-950/50 text-gray-400 hover:text-gray-300'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    className="hidden"
+                    accept="image/*"
+                  />
+                  {uploading ? (
+                    <div className="flex flex-col items-center gap-1.5">
+                      <span className="h-5 w-5 animate-spin rounded-full border-2 border-brand-blue border-t-transparent" />
+                      <span className="text-[10px] uppercase font-bold tracking-widest text-brand-blue glow-text-blue">
+                        [ UPLOADING SIGNATURE... ]
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <UploadCloud size={20} className={isDragging ? 'text-brand-purple' : 'text-gray-500'} />
+                      <div className="text-[10px] font-mono uppercase tracking-wide">
+                        {avatarUrl ? (
+                          <span className="text-brand-blue">[ IMAGE READY - CLICK TO REPLACE ]</span>
+                        ) : (
+                          <span>DROP IMAGE HERE OR CLICK TO CHOOSE</span>
+                        )}
+                      </div>
+                      <p className="text-[8px] text-gray-500 uppercase">
+                        PNG, JPG, WEBP UP TO 2MB
+                      </p>
+                    </>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-[10px] font-mono text-gray-400 mb-1 uppercase">Avatar Link URL</label>

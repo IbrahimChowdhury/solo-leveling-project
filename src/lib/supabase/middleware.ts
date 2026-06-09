@@ -34,9 +34,10 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname
   const isAuthPage = path.startsWith('/login') || path.startsWith('/signup')
   const isApiRoute = path.startsWith('/api')
+  const isAuthCallback = path.startsWith('/auth')
 
-  // Let API webhooks and reset crons handle their own auth
-  if (isApiRoute) {
+  // Let API webhooks, reset crons, and OAuth callback handlers handle their own auth
+  if (isApiRoute || isAuthCallback) {
     return supabaseResponse
   }
 

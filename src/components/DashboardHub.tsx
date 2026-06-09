@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
@@ -33,6 +33,36 @@ export default function DashboardHub({
 }: DashboardHubProps) {
   const router = useRouter()
   const [loadingQuestId, setLoadingQuestId] = useState<string | null>(null)
+  const [timeLeft, setTimeLeft] = useState<string>('')
+
+  useEffect(() => {
+    let lastDate = new Date().getUTCDate()
+    const updateTimer = () => {
+      const now = new Date()
+      const currentDate = now.getUTCDate()
+      if (currentDate !== lastDate) {
+        lastDate = currentDate
+        router.refresh()
+      }
+      
+      const nextReset = new Date()
+      nextReset.setUTCHours(24, 0, 0, 0)
+      const diff = nextReset.getTime() - now.getTime()
+      if (diff <= 0) {
+        setTimeLeft('00:00:00')
+        return
+      }
+      const hours = Math.floor(diff / (1000 * 60 * 60))
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+      const pad = (num: number) => String(num).padStart(2, '0')
+      setTimeLeft(`${pad(hours)}:${pad(minutes)}:${pad(seconds)}`)
+    }
+
+    updateTimer()
+    const interval = setInterval(updateTimer, 1000)
+    return () => clearInterval(interval)
+  }, [router])
 
   // Quest Details / Claim Modal States
   const [selectedQuest, setSelectedQuest] = useState<DailyQuest | CustomQuest | null>(null)
@@ -298,8 +328,8 @@ export default function DashboardHub({
             <h2 className="text-sm font-bold tracking-widest text-brand-blue glow-text-blue uppercase">
               [ DAILY QUEST: PREPARATION TO BECOME STRONG ]
             </h2>
-            <div className="text-[10px] text-gray-500 flex items-center gap-1">
-              <Clock size={12} /> resets 00:00 UTC
+            <div className="text-[10px] text-gray-500 flex items-center gap-1 font-mono uppercase">
+              <Clock size={12} className="animate-pulse text-brand-blue" /> resets in {timeLeft || '--:--:--'}
             </div>
           </div>
 

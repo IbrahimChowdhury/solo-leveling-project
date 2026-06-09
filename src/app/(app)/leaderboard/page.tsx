@@ -14,7 +14,16 @@ export default async function LeaderboardPage() {
     redirect('/login')
   }
 
-  // 2. Fetch top 10 profiles sorted by level desc, then total_xp desc
+  // 2. Fetch current user's profile to evaluate Pro permissions
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_pro')
+    .eq('id', user.id)
+    .single()
+
+  const isPro = !!profile?.is_pro
+
+  // 3. Fetch top 10 profiles sorted by level desc, then total_xp desc
   const { data: topHunters, error } = await supabase
     .from('profiles')
     .select('id, display_name, level, total_xp, rank, avatar_url, is_pro')
@@ -45,91 +54,126 @@ export default async function LeaderboardPage() {
           </h2>
         </div>
 
-        {error || !topHunters || topHunters.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 font-mono">
-            No hunters found in status records.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left font-mono border-collapse">
-              <thead>
-                <tr className="border-b border-slate-800 text-[10px] text-gray-500 uppercase tracking-widest">
-                  <th className="pb-3 pl-4">Rank</th>
-                  <th className="pb-3">Hunter</th>
-                  <th className="pb-3 text-center">Level</th>
-                  <th className="pb-3 text-center">System Rank</th>
-                  <th className="pb-3 text-right pr-4">Level XP</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topHunters.map((hunter: Partial<Profile>, index: number) => {
-                  const isSelf = hunter.id === user.id
-                  const rankNum = index + 1
-
-                  let medalColor = ''
-                  if (rankNum === 1) medalColor = 'text-brand-gold glow-text-gold'
-                  else if (rankNum === 2) medalColor = 'text-slate-300'
-                  else if (rankNum === 3) medalColor = 'text-amber-600'
-
-                  return (
-                    <tr
-                      key={hunter.id}
-                      className={`border-b border-slate-900/50 last:border-0 hover:bg-slate-900/30 transition-all ${
-                        isSelf ? 'bg-brand-blue/5 border-l-2 border-l-brand-blue' : ''
-                      }`}
-                    >
-                      <td className="py-4 pl-4 font-black">
-                        {rankNum <= 3 ? (
-                          <span className={`flex items-center gap-1 ${medalColor}`}>
-                            <Award size={18} />
-                            {rankNum}
-                          </span>
-                        ) : (
-                          <span className="text-gray-500 pl-1">{rankNum}</span>
-                        )}
-                      </td>
-                      <td className="py-4">
-                        <div className="flex items-center gap-3">
-                          {hunter.avatar_url ? (
-                            <img
-                              src={hunter.avatar_url}
-                              alt={hunter.display_name}
-                              className={`w-8 h-8 rounded-full object-cover border ${
-                                hunter.is_pro ? 'border-brand-gold glow-gold' : 'border-brand-blue'
-                              }`}
-                            />
-                          ) : (
-                            <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-xs text-white">
-                              {hunter.display_name?.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                          <div>
-                            <span className={`text-sm font-bold block ${isSelf ? 'text-brand-blue' : 'text-gray-200'}`}>
-                              {hunter.display_name}
-                              {isSelf && <span className="text-[9px] font-normal text-brand-blue bg-brand-blue/10 border border-brand-blue/20 px-1 rounded ml-1.5 uppercase">Self</span>}
-                              {hunter.is_pro && <span className="text-[9px] font-extrabold text-brand-gold bg-brand-gold/10 border border-brand-gold/20 px-1 rounded ml-1.5 uppercase">Pro</span>}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-4 text-center font-bold text-white text-sm">
-                        Lvl {hunter.level}
-                      </td>
-                      <td className="py-4 text-center">
-                        <span className="text-xs text-brand-purple font-bold uppercase tracking-wider glow-text-purple">
-                          {hunter.rank}
-                        </span>
-                      </td>
-                      <td className="py-4 text-right text-xs text-gray-400 pr-4">
-                        {hunter.total_xp} XP
-                      </td>
+        <div className="relative">
+          {/* Blurred Table Container for Free Users */}
+          <div className={!isPro ? "blur-md select-none pointer-events-none filter" : ""}>
+            {error || !topHunters || topHunters.length === 0 ? (
+              <div className="text-center py-8 text-gray-500 font-mono">
+                No hunters found in status records.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left font-mono border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-[10px] text-gray-500 uppercase tracking-widest">
+                      <th className="pb-3 pl-4">Rank</th>
+                      <th className="pb-3">Hunter</th>
+                      <th className="pb-3 text-center">Level</th>
+                      <th className="pb-3 text-center">System Rank</th>
+                      <th className="pb-3 text-right pr-4">Level XP</th>
                     </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {topHunters.map((hunter: Partial<Profile>, index: number) => {
+                      const isSelf = hunter.id === user.id
+                      const rankNum = index + 1
+
+                      let medalColor = ''
+                      if (rankNum === 1) medalColor = 'text-brand-gold glow-text-gold'
+                      else if (rankNum === 2) medalColor = 'text-slate-300'
+                      else if (rankNum === 3) medalColor = 'text-amber-600'
+
+                      return (
+                        <tr
+                          key={hunter.id}
+                          className={`border-b border-slate-900/50 last:border-0 hover:bg-slate-900/30 transition-all ${
+                            isSelf ? 'bg-brand-blue/5 border-l-2 border-l-brand-blue' : ''
+                          }`}
+                        >
+                          <td className="py-4 pl-4 font-black">
+                            {rankNum <= 3 ? (
+                              <span className={`flex items-center gap-1 ${medalColor}`}>
+                                <Award size={18} />
+                                {rankNum}
+                              </span>
+                            ) : (
+                              <span className="text-gray-500 pl-1">{rankNum}</span>
+                            )}
+                          </td>
+                          <td className="py-4">
+                            <div className="flex items-center gap-3">
+                              {hunter.avatar_url ? (
+                                <img
+                                  src={hunter.avatar_url}
+                                  alt={hunter.display_name}
+                                  className={`w-8 h-8 rounded-full object-cover border ${
+                                    hunter.is_pro ? 'border-brand-gold glow-gold' : 'border-brand-blue'
+                                  }`}
+                                />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-xs text-white">
+                                  {hunter.display_name?.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div>
+                                <span className={`text-sm font-bold block ${isSelf ? 'text-brand-blue' : 'text-gray-200'}`}>
+                                  {hunter.display_name}
+                                  {isSelf && <span className="text-[9px] font-normal text-brand-blue bg-brand-blue/10 border border-brand-blue/20 px-1 rounded ml-1.5 uppercase">Self</span>}
+                                  {hunter.is_pro && <span className="text-[9px] font-extrabold text-brand-gold bg-brand-gold/10 border border-brand-gold/20 px-1 rounded ml-1.5 uppercase">Pro</span>}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-4 text-center font-bold text-white text-sm">
+                            Lvl {hunter.level}
+                          </td>
+                          <td className="py-4 text-center">
+                            <span className="text-xs text-brand-purple font-bold uppercase tracking-wider glow-text-purple">
+                              {hunter.rank}
+                            </span>
+                          </td>
+                          <td className="py-4 text-right text-xs text-gray-400 pr-4">
+                            {hunter.total_xp} XP
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        )}
+
+          {/* Locked Notification Overlay Card */}
+          {!isPro && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-slate-950/20 backdrop-blur-[2px] rounded-xl">
+              <div className="max-w-md w-full bg-[#02050c]/98 border-2 border-brand-gold rounded-lg p-6 text-center shadow-2xl glow-gold relative overflow-hidden">
+                {/* Tech Bracket Corners */}
+                <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-brand-gold" />
+                <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-brand-gold" />
+                <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-brand-gold" />
+                <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-brand-gold" />
+
+                <ShieldAlert className="mx-auto text-brand-gold animate-pulse mb-3.5" size={32} />
+                
+                <h3 className="text-xs font-black tracking-widest text-brand-gold glow-text-gold uppercase mb-2">
+                  [ ACCESS PERMISSION REQUIRED ]
+                </h3>
+                
+                <p className="text-[10px] text-gray-300 font-mono uppercase tracking-wide leading-relaxed mb-6">
+                  Warning: Leaderboard clearance coordinates are restricted. Only PRO hunters have registry access permissions. Awaken your profile status credentials to view global rankings.
+                </p>
+
+                <a
+                  href="/upgrade"
+                  className="inline-block w-full py-3 bg-brand-gold hover:bg-yellow-400 text-black font-black text-[10px] uppercase tracking-widest rounded transition-all glow-gold"
+                >
+                  AWAKEN PRO
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
