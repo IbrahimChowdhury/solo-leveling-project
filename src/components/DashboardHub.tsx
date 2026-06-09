@@ -203,6 +203,35 @@ export default function DashboardHub({
         </div>
       </div>
 
+      {/* Pro Ascension Alert for Free Players */}
+      {!profile.is_pro && (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-brand-gold/5 border-2 border-brand-gold/40 rounded-lg p-5 relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4 glow-gold"
+        >
+          {/* Brackets */}
+          <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-brand-gold" />
+          <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-brand-gold" />
+          
+          <div className="space-y-1">
+            <h4 className="text-xs font-black tracking-widest text-brand-gold glow-text-gold uppercase flex items-center gap-1.5 animate-pulse">
+              <Zap size={14} className="fill-brand-gold text-brand-gold" /> [ SYSTEM PROMPT: PRO AWAKENING AVAILABLE ]
+            </h4>
+            <p className="text-[10px] text-gray-300 leading-relaxed uppercase">
+              Upgrade your hunter status credentials to PRO to activate automated daily trial generators and unlock elite challenge limits to become the supreme version of yourself.
+            </p>
+          </div>
+
+          <button
+            onClick={() => router.push('/upgrade')}
+            className="w-full md:w-auto px-5 py-2.5 bg-brand-gold hover:bg-yellow-400 text-black font-black text-[10px] uppercase tracking-widest rounded shrink-0 transition-all glow-gold cursor-pointer"
+          >
+            AWAKEN PRO
+          </button>
+        </motion.div>
+      )}
+
       {/* Grid: Daily System Quests & Quick Quests */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         

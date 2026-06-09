@@ -40,7 +40,9 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse
   }
 
-  if (!user && !isAuthPage) {
+  const isLandingPage = path === '/'
+
+  if (!user && !isAuthPage && !isLandingPage) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

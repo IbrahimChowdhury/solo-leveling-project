@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import DashboardHub from '@/components/DashboardHub'
+import { getProfile } from '@/app/actions/profile'
 import { generateDailyQuests } from '@/lib/quests-generator'
 import { Profile } from '@/types'
 
@@ -15,14 +16,10 @@ export default async function DashboardPage() {
     redirect('/login')
   }
 
-  // 2. Fetch profile
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  // 2. Fetch profile using getProfile helper (triggers automatic recovery fallbacks)
+  const profile = await getProfile()
 
-  if (profileError || !profile) {
+  if (!profile) {
     redirect('/login')
   }
 

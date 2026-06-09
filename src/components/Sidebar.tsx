@@ -37,7 +37,7 @@ export default function Sidebar({ profile }: SidebarProps) {
   }
 
   const navItems = [
-    { name: 'System Hub', href: '/', icon: Home },
+    { name: 'System Hub', href: '/dashboard', icon: Home },
     { name: 'Custom Quests', href: '/my-quests', icon: Compass },
     { name: 'Hunter Stats', href: '/stats', icon: BarChart2 },
     { name: 'Profile', href: '/profile', icon: User },
@@ -58,7 +58,7 @@ export default function Sidebar({ profile }: SidebarProps) {
     <div className="flex flex-col h-full bg-[#0b0f19] border-r border-[#1f2937] text-gray-200">
       {/* Brand Header */}
       <div className="p-6 border-b border-[#1f2937]">
-        <Link href="/" onClick={() => setIsOpen(false)}>
+        <Link href="/dashboard" onClick={() => setIsOpen(false)}>
           <div className="flex items-center gap-2 cursor-pointer">
             <span className="text-xl font-bold font-mono tracking-widest text-brand-blue glow-text-blue">
               SOLO LEVELING
@@ -165,7 +165,7 @@ export default function Sidebar({ profile }: SidebarProps) {
     <>
       {/* Mobile Top Header */}
       <header className="flex lg:hidden items-center justify-between bg-[#0b0f19] border-b border-[#1f2937] p-4 text-white">
-        <Link href="/">
+        <Link href="/dashboard">
           <span className="text-lg font-bold font-mono tracking-widest text-brand-blue glow-text-blue">
             SOLO LEVELING
           </span>
