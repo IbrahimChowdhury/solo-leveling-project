@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { processXP } from '@/lib/game'
 import { revalidatePath } from 'next/cache'
+import { generateDailyQuests } from '@/lib/quests-generator'
 
 export async function getDailyQuests() {
   const supabase = await createClient()
@@ -328,18 +329,17 @@ export async function addCustomQuest(
 
   if (!profile) return { error: 'Profile not found.' }
 
-  // Check quest limit for Free users
-  if (!profile.is_pro) {
-    const { count, error: countError } = await supabase
-      .from('custom_quests')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('active', true)
+  // Check quest limit
+  const limit = profile.is_pro ? 40 : 3
+  const { count, error: countError } = await supabase
+    .from('custom_quests')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('active', true)
 
-    if (countError) return { error: countError.message }
-    if (count && count >= 5) {
-      return { error: 'Free tier limits you to 5 active custom quests. Upgrade to Pro for unlimited quests!' }
-    }
+  if (countError) return { error: countError.message }
+  if (count && count >= limit) {
+    return { error: `Active custom quests limit reached (${count}/${limit}). ${profile.is_pro ? 'Max limit is 40.' : 'Upgrade to PRO to get 40 slots!'}` }
   }
 
   // Insert quest
@@ -356,6 +356,44 @@ export async function addCustomQuest(
 
   if (error) return { error: error.message }
 
+  // If new quest is daily, and it is the first daily quest, trigger regeneration to clear examples immediately
+  if (repeatType === 'daily') {
+    const { count: activeDailyCount } = await supabase
+      .from('custom_quests')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('active', true)
+      .eq('repeat_type', 'daily')
+
+    if (activeDailyCount === 1) {
+      const today = new Date().toISOString().split('T')[0]
+      const { data: todayQuests } = await supabase
+        .from('daily_quests')
+        .select('id, completed')
+        .eq('user_id', user.id)
+        .eq('date', today)
+
+      const anyCompleted = todayQuests?.some(q => q.completed)
+      if (todayQuests && todayQuests.length > 0 && !anyCompleted) {
+        await supabase
+          .from('daily_quests')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('date', today)
+
+        const { data: latestProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+        
+        if (latestProfile) {
+          await generateDailyQuests(latestProfile)
+        }
+      }
+    }
+  }
+
   revalidatePath('/my-quests')
   return { success: true }
 }
@@ -365,6 +403,14 @@ export async function deleteCustomQuest(questId: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated.' }
 
+  // Fetch the quest details before updating
+  const { data: quest } = await supabase
+    .from('custom_quests')
+    .select('repeat_type')
+    .eq('id', questId)
+    .eq('user_id', user.id)
+    .single()
+
   const { error } = await supabase
     .from('custom_quests')
     .update({ active: false })
@@ -372,6 +418,182 @@ export async function deleteCustomQuest(questId: string) {
     .eq('user_id', user.id)
 
   if (error) return { error: error.message }
+
+  // If deleting a daily quest, check if we have 0 custom daily quests remaining
+  if (quest && quest.repeat_type === 'daily') {
+    const { count: activeDailyCount } = await supabase
+      .from('custom_quests')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('active', true)
+      .eq('repeat_type', 'daily')
+
+    if (activeDailyCount === 0) {
+      // Revert back to the 3 system example quests if today's daily quests are not completed
+      const today = new Date().toISOString().split('T')[0]
+      const { data: todayQuests } = await supabase
+        .from('daily_quests')
+        .select('id, completed')
+        .eq('user_id', user.id)
+        .eq('date', today)
+
+      const anyCompleted = todayQuests?.some(q => q.completed)
+      if (todayQuests && todayQuests.length > 0 && !anyCompleted) {
+        // Delete today's custom daily quests copies
+        await supabase
+          .from('daily_quests')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('date', today)
+
+        // Regenerate daily quests to bring back system examples
+        const { data: latestProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+        
+        if (latestProfile) {
+          await generateDailyQuests(latestProfile)
+        }
+      }
+    }
+  }
+
+  revalidatePath('/my-quests')
+  return { success: true }
+}
+
+export async function editCustomQuest(
+  questId: string,
+  title: string,
+  description: string,
+  statCategory: string,
+  xpReward: number,
+  repeatType: 'one-time' | 'daily' | 'weekly' | 'monthly' | 'yearly',
+  proofRequired: boolean
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
+  // Validate inputs
+  if (!title || title.trim().length === 0) return { error: 'Title is required.' }
+  if (xpReward < 20 || xpReward > 500) return { error: 'XP reward must be between 20 and 500.' }
+
+  // Fetch the original quest details
+  const { data: originalQuest } = await supabase
+    .from('custom_quests')
+    .select('repeat_type, title')
+    .eq('id', questId)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!originalQuest) return { error: 'Quest not found.' }
+
+  // Update custom_quests row
+  const { error } = await supabase
+    .from('custom_quests')
+    .update({
+      title,
+      description,
+      stat_category: statCategory,
+      xp_reward: xpReward,
+      repeat_type: repeatType,
+      proof_required: proofRequired,
+    })
+    .eq('id', questId)
+    .eq('user_id', user.id)
+
+  if (error) return { error: error.message }
+
+  // Synchronize today's daily_quests copy if needed
+  const today = new Date().toISOString().split('T')[0]
+
+  if (repeatType === 'daily') {
+    // If it is daily now, check if today has a daily_quests entry for this quest (matching by original title)
+    const { data: todayCopy } = await supabase
+      .from('daily_quests')
+      .select('id, completed')
+      .eq('user_id', user.id)
+      .eq('date', today)
+      .eq('title', originalQuest.title)
+      .maybeSingle()
+
+    if (todayCopy && !todayCopy.completed) {
+      // Update today's copy
+      await supabase
+        .from('daily_quests')
+        .update({
+          title,
+          description,
+          stat_category: statCategory,
+          xp_reward: xpReward,
+        })
+        .eq('id', todayCopy.id)
+    } else if (!todayCopy) {
+      // If it became daily (changed from e.g. weekly to daily), check if this is now the first custom daily quest.
+      // If so, replace system examples immediately!
+      const { count: activeDailyCount } = await supabase
+        .from('custom_quests')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('active', true)
+        .eq('repeat_type', 'daily')
+
+      if (activeDailyCount === 1) {
+        const { data: todayQuests } = await supabase
+          .from('daily_quests')
+          .select('id, completed')
+          .eq('user_id', user.id)
+          .eq('date', today)
+
+        const anyCompleted = todayQuests?.some(q => q.completed)
+        if (todayQuests && todayQuests.length > 0 && !anyCompleted) {
+          await supabase.from('daily_quests').delete().eq('user_id', user.id).eq('date', today)
+          const { data: latestProfile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+          if (latestProfile) await generateDailyQuests(latestProfile)
+        }
+      }
+    }
+  } else if (originalQuest.repeat_type === 'daily') {
+    // Stopped being daily! Check if 0 custom daily quests remain
+    const { count: activeDailyCount } = await supabase
+      .from('custom_quests')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('active', true)
+      .eq('repeat_type', 'daily')
+
+    if (activeDailyCount === 0) {
+      // Revert back to system examples
+      const { data: todayQuests } = await supabase
+        .from('daily_quests')
+        .select('id, completed')
+        .eq('user_id', user.id)
+        .eq('date', today)
+
+      const anyCompleted = todayQuests?.some(q => q.completed)
+      if (todayQuests && todayQuests.length > 0 && !anyCompleted) {
+        await supabase.from('daily_quests').delete().eq('user_id', user.id).eq('date', today)
+        const { data: latestProfile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+        if (latestProfile) await generateDailyQuests(latestProfile)
+      }
+    } else {
+      // Delete today's copy of this changed daily quest if it was not completed
+      const { data: todayCopy } = await supabase
+        .from('daily_quests')
+        .select('id, completed')
+        .eq('user_id', user.id)
+        .eq('date', today)
+        .eq('title', originalQuest.title)
+        .maybeSingle()
+
+      if (todayCopy && !todayCopy.completed) {
+        await supabase.from('daily_quests').delete().eq('id', todayCopy.id)
+      }
+    }
+  }
 
   revalidatePath('/my-quests')
   return { success: true }

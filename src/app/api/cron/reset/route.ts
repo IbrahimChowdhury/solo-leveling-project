@@ -141,10 +141,10 @@ export async function GET(request: Request) {
         ...profileUpdates,
       })
 
-      // 6. Log stat history entry for the new day
+      // 6. Log stat history entry for the processed day
       await adminDb.from('stat_history').insert({
         user_id: profile.id,
-        date: today,
+        date: yesterday,
         attack_power: userStats.attack_power,
         intelligence: userStats.intelligence,
         endurance: userStats.endurance,

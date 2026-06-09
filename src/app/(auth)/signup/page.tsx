@@ -77,10 +77,10 @@ export default function SignupPage() {
               <ShieldCheck size={24} />
             </div>
             <h3 className="text-lg font-bold font-mono text-white tracking-wide">
-              REGISTRATION SENT!
+              REGISTRATION COMPLETED! 🎮
             </h3>
             <p className="text-sm text-gray-300">
-              Please check your email for the confirmation link to activate your system profile.
+              Now go to the Login Gate and Login.
             </p>
             <div className="pt-4">
               <Link 

@@ -3,9 +3,9 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Plus, Trash2, Zap, AlertTriangle, CheckCircle, ShieldCheck } from 'lucide-react'
+import { Plus, Trash2, Zap, AlertTriangle, CheckCircle, ShieldCheck, Edit3 } from 'lucide-react'
 import { Profile, CustomQuest } from '@/types'
-import { addCustomQuest, deleteCustomQuest } from '@/app/actions/quests'
+import { addCustomQuest, deleteCustomQuest, editCustomQuest } from '@/app/actions/quests'
 
 interface QuestsManagerProps {
   profile: Profile
@@ -27,17 +27,46 @@ export default function QuestsManager({
   const [xpReward, setXpReward] = useState(50)
   const [repeatType, setRepeatType] = useState<'one-time' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('daily')
   const [proofRequired, setProofRequired] = useState(false)
+  const [editingQuestId, setEditingQuestId] = useState<string | null>(null)
 
-  // Enforce Quest Limits
-  const isLimitReached = !profile.is_pro && customQuests.length >= 5
+  // Enforce Quest Limits (bypassed if editing)
+  const limit = profile.is_pro ? 40 : 3
+  const isLimitReached = !editingQuestId && customQuests.length >= limit
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setLoading(true)
 
+    if (editingQuestId) {
+      const res = await editCustomQuest(
+        editingQuestId,
+        title,
+        description,
+        statCategory,
+        xpReward,
+        repeatType,
+        proofRequired
+      )
+
+      setLoading(false)
+
+      if (res.error) {
+        setError(res.error)
+      } else {
+        // Clear form
+        setTitle('')
+        setDescription('')
+        setXpReward(50)
+        setProofRequired(false)
+        setEditingQuestId(null)
+        router.refresh()
+      }
+      return
+    }
+
     if (isLimitReached) {
-      setError('Free hunters are limited to 5 active custom quests. Awaken PRO to bypass this lock!')
+      setError(`Active custom quests limit reached (${customQuests.length}/${limit}). ${profile.is_pro ? 'Limit is 40.' : 'Upgrade to PRO to get 40 slots!'}`)
       setLoading(false)
       return
     }
@@ -71,8 +100,31 @@ export default function QuestsManager({
     if (res.error) {
       alert(res.error)
     } else {
+      if (editingQuestId === questId) {
+        handleCancelEdit()
+      }
       router.refresh()
     }
+  }
+
+  const handleStartEdit = (quest: CustomQuest) => {
+    setEditingQuestId(quest.id)
+    setTitle(quest.title)
+    setDescription(quest.description || '')
+    setStatCategory(quest.stat_category)
+    setXpReward(quest.xp_reward)
+    setRepeatType(quest.repeat_type as any)
+    setProofRequired(quest.proof_required)
+    setError(null)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingQuestId(null)
+    setTitle('')
+    setDescription('')
+    setXpReward(50)
+    setProofRequired(false)
+    setError(null)
   }
 
   return (
@@ -92,7 +144,7 @@ export default function QuestsManager({
         <div className="space-y-6">
           <div className="bg-[#0b0f19] border border-slate-800 rounded-xl p-6 relative overflow-hidden">
             <h2 className="text-lg font-bold font-mono tracking-widest text-brand-purple glow-text-purple mb-4 uppercase">
-              CREATE TRIAL
+              {editingQuestId ? 'EDIT TRIAL' : 'CREATE TRIAL'}
             </h2>
 
             {error && (
@@ -104,18 +156,22 @@ export default function QuestsManager({
             {isLimitReached && (
               <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-brand-gold font-mono text-xs mb-4 space-y-3">
                 <p className="flex items-center gap-1.5 font-bold">
-                  <AlertTriangle size={14} /> ACTIVE CAP REACHED (5/5)
+                  <AlertTriangle size={14} /> ACTIVE CAP REACHED ({customQuests.length}/{limit})
                 </p>
                 <p className="text-[10px] text-gray-300">
-                  Upgrade your status to PRO to remove custom quest limits.
+                  {profile.is_pro 
+                    ? 'You have reached the maximum limit of 40 active custom quests.' 
+                    : 'Upgrade your status to PRO to increase custom quest limit to 40.'}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => router.push('/upgrade')}
-                  className="w-full py-2 bg-brand-gold text-black text-[10px] font-black uppercase rounded tracking-wider flex items-center justify-center gap-1 glow-gold cursor-pointer"
-                >
-                  <Zap size={10} className="fill-black" /> Awaken PRO Version
-                </button>
+                {!profile.is_pro && (
+                  <button
+                    type="button"
+                    onClick={() => router.push('/upgrade')}
+                    className="w-full py-2 bg-brand-gold text-black text-[10px] font-black uppercase rounded tracking-wider flex items-center justify-center gap-1 glow-gold cursor-pointer"
+                  >
+                    <Zap size={10} className="fill-black" /> Awaken PRO Version
+                  </button>
+                )}
               </div>
             )}
 
@@ -222,19 +278,32 @@ export default function QuestsManager({
                 </label>
               </div>
 
-              <button
-                type="submit"
-                disabled={isLimitReached || loading}
-                className="w-full py-3 bg-brand-purple hover:bg-[#906ef6] text-white font-extrabold font-mono text-sm uppercase rounded-lg tracking-wider transition-all glow-purple disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                {loading ? (
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                ) : (
-                  <>
-                    <Plus size={16} /> Forge Quest
-                  </>
+              <div className="flex gap-2">
+                {editingQuestId && (
+                  <button
+                    type="button"
+                    onClick={handleCancelEdit}
+                    disabled={loading}
+                    className="flex-1 py-3 border border-slate-800 hover:border-slate-700 bg-slate-900/50 hover:bg-slate-900 text-gray-400 hover:text-white font-extrabold font-mono text-xs uppercase rounded-lg tracking-wider transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
                 )}
-              </button>
+                <button
+                  type="submit"
+                  disabled={(!editingQuestId && isLimitReached) || loading}
+                  className="flex-[2] py-3 bg-brand-purple hover:bg-[#906ef6] text-white font-extrabold font-mono text-xs uppercase rounded-lg tracking-wider transition-all glow-purple disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  {loading ? (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  ) : (
+                    <>
+                      {editingQuestId ? <Zap size={14} /> : <Plus size={14} />} 
+                      {editingQuestId ? 'Update Quest' : 'Forge Quest'}
+                    </>
+                  )}
+                </button>
+              </div>
             </form>
           </div>
         </div>
@@ -287,7 +356,17 @@ export default function QuestsManager({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 w-full md:w-auto shrink-0 md:justify-end border-t md:border-t-0 pt-3 md:pt-0 border-slate-900">
+                  <div className="flex items-center gap-2 w-full md:w-auto shrink-0 md:justify-end border-t md:border-t-0 pt-3 md:pt-0 border-slate-900">
+                    <button
+                      onClick={() => handleStartEdit(quest)}
+                      className={`p-2 border rounded-lg transition-all cursor-pointer flex-1 md:flex-none flex justify-center ${
+                        editingQuestId === quest.id 
+                          ? 'border-brand-purple text-brand-purple bg-brand-purple/10 glow-purple' 
+                          : 'border-slate-800 text-gray-400 hover:text-white hover:bg-slate-900'
+                      }`}
+                    >
+                      <Edit3 size={16} />
+                    </button>
                     <button
                       onClick={() => handleDelete(quest.id)}
                       className="p-2 border border-red-500/20 text-brand-red hover:bg-brand-red/10 rounded-lg transition-all cursor-pointer flex-1 md:flex-none flex justify-center"

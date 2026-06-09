@@ -1,5 +1,6 @@
 import { Profile, StatCategory } from '@/types'
 import { createAdminClient } from '@/lib/supabase/server'
+import { processXPLoss } from './game'
 
 interface QuestTemplate {
   title: string
@@ -44,7 +45,6 @@ export async function generateDailyQuests(profile: Profile) {
   const adminDb = createAdminClient()
   const today = new Date().toISOString().split('T')[0]
 
-  // Check if quests already exist for today
   const { data: existingQuests } = await adminDb
     .from('daily_quests')
     .select('id')
@@ -55,48 +55,72 @@ export async function generateDailyQuests(profile: Profile) {
     return existingQuests
   }
 
-  // Identify weakest stats
-  const statKeys: StatCategory[] = [
-    'attack_power',
-    'intelligence',
-    'endurance',
-    'stamina',
-    'exercise',
-    'skills'
-  ]
+  // Check if the user has any active custom daily quests
+  const { data: activeCustomDailyQuests } = await adminDb
+    .from('custom_quests')
+    .select('*')
+    .eq('user_id', profile.id)
+    .eq('active', true)
+    .eq('repeat_type', 'daily')
 
-  const stats = statKeys.map(key => ({
-    category: key,
-    value: profile[key] as number
-  }))
+  let questsToInsert = []
 
-  // Sort ascending by value to find weak stats
-  stats.sort((a, b) => a.value - b.value)
+  if (activeCustomDailyQuests && activeCustomDailyQuests.length > 0) {
+    // Generate daily quests from their custom daily quests templates
+    questsToInsert = activeCustomDailyQuests.map(cq => {
+      let xpReward = cq.xp_reward
+      if (profile.streak_days > 0) {
+        xpReward = Math.floor(xpReward * 1.15)
+      }
+      return {
+        user_id: profile.id,
+        date: today,
+        title: cq.title,
+        description: cq.description,
+        stat_category: cq.stat_category,
+        xp_reward: xpReward,
+        completed: false,
+      }
+    })
+  } else {
+    // Generate 3 system default example daily quests (XP range 20-30)
+    const EXAMPLE_QUESTS = [
+      { 
+        title: 'System Daily Warm-up', 
+        description: 'Complete 10 minutes of light physical stretching or warmup exercises to harden basic muscle fibers.', 
+        stat_category: 'endurance', 
+        xp_reward: 20 
+      },
+      { 
+        title: 'Mental Focus Exercise', 
+        description: 'Dedicate 15 minutes of uninterrupted reading, technical coding, or logical challenge training.', 
+        stat_category: 'intelligence', 
+        xp_reward: 25 
+      },
+      { 
+        title: 'Hydration & Vitality Protocol', 
+        description: 'Consume at least 2 liters of pure water and check status coordinates configurations.', 
+        stat_category: 'stamina', 
+        xp_reward: 20 
+      },
+    ]
 
-  // Take the 5 weakest stat categories
-  const targetCategories = stats.slice(0, 5).map(s => s.category)
-
-  const questsToInsert = targetCategories.map(cat => {
-    const list = TEMPLATES[cat]
-    // Select random template
-    const template = list[Math.floor(Math.random() * list.length)]
-    
-    // Streak XP adjustment (+15%)
-    let xpReward = template.xp
-    if (profile.streak_days > 0) {
-      xpReward = Math.floor(xpReward * 1.15)
-    }
-
-    return {
-      user_id: profile.id,
-      date: today,
-      title: template.title,
-      description: template.description,
-      stat_category: cat,
-      xp_reward: xpReward,
-      completed: false,
-    }
-  })
+    questsToInsert = EXAMPLE_QUESTS.map(eq => {
+      let xpReward = eq.xp_reward
+      if (profile.streak_days > 0) {
+        xpReward = Math.floor(xpReward * 1.15)
+      }
+      return {
+        user_id: profile.id,
+        date: today,
+        title: eq.title,
+        description: eq.description,
+        stat_category: eq.stat_category,
+        xp_reward: xpReward,
+        completed: false,
+      }
+    })
+  }
 
   const { data, error } = await adminDb
     .from('daily_quests')
@@ -109,4 +133,190 @@ export async function generateDailyQuests(profile: Profile) {
   }
 
   return data
+}
+
+export async function checkAndRunDailyReset(profile: Profile) {
+  const adminDb = createAdminClient()
+  const today = new Date().toISOString().split('T')[0]
+
+  // Find all unique dates < today where daily quests exist for this user
+  const { data: pastQuests } = await adminDb
+    .from('daily_quests')
+    .select('date')
+    .eq('user_id', profile.id)
+    .lt('date', today)
+    .order('date', { ascending: true })
+
+  const uniquePastDates = Array.from(new Set((pastQuests || []).map(q => q.date)))
+
+  for (const qDate of uniquePastDates) {
+    // Check if qDate was already processed via stat_history logs
+    const { data: existingHistory } = await adminDb
+      .from('stat_history')
+      .select('id')
+      .eq('user_id', profile.id)
+      .eq('date', qDate)
+      .maybeSingle()
+
+    if (existingHistory) {
+      continue
+    }
+
+    // Fetch the most updated profile state from database
+    const { data: currentProfile, error: pErr } = await adminDb
+      .from('profiles')
+      .select('*')
+      .eq('id', profile.id)
+      .single()
+
+    if (pErr || !currentProfile) {
+      console.error('Failed to fetch current profile for reset:', pErr)
+      continue
+    }
+
+    // Get the daily quests for this specific date
+    const { data: questsForDate } = await adminDb
+      .from('daily_quests')
+      .select('*')
+      .eq('user_id', profile.id)
+      .eq('date', qDate)
+
+    if (!questsForDate || questsForDate.length === 0) {
+      // No quests existed on this date. Just log stat history at current levels.
+      await adminDb.from('stat_history').insert({
+        user_id: profile.id,
+        date: qDate,
+        attack_power: currentProfile.attack_power,
+        intelligence: currentProfile.intelligence,
+        endurance: currentProfile.endurance,
+        stamina: currentProfile.stamina,
+        exercise: currentProfile.exercise,
+        skills: currentProfile.skills,
+      })
+      continue
+    }
+
+    const completed = questsForDate.filter(q => q.completed).length
+    const total = questsForDate.length
+    const completionRate = completed / total
+
+    let nextStreak = currentProfile.streak_days
+    let newLevel = currentProfile.level
+    let newXP = currentProfile.total_xp
+    let newRank = currentProfile.rank
+
+    const userStats = {
+      attack_power: currentProfile.attack_power,
+      intelligence: currentProfile.intelligence,
+      endurance: currentProfile.endurance,
+      stamina: currentProfile.stamina,
+      exercise: currentProfile.exercise,
+      skills: currentProfile.skills,
+    }
+
+    let shieldConsumed = false
+
+    if (completionRate >= 0.8) {
+      nextStreak += 1
+    } else {
+      const hasShield = currentProfile.is_pro && currentProfile.penalty_shield_used_this_week
+
+      if (hasShield) {
+        shieldConsumed = true
+      } else {
+        const incompleteQuests = questsForDate.filter(q => !q.completed)
+        let xpLost = 0
+
+        for (const q of incompleteQuests) {
+          xpLost += 50
+          const statCat = q.stat_category
+          userStats[statCat as keyof typeof userStats] = Math.max(0, userStats[statCat as keyof typeof userStats] - 2)
+
+          // Log penalty parameters
+          await adminDb.from('penalties').insert({
+            user_id: profile.id,
+            quest_type: 'system',
+            quest_id: q.id,
+            xp_lost: 50,
+            stat_decreased: statCat,
+            decrease_amount: 2,
+          })
+        }
+
+        // Compute level/XP degradation
+        const degradation = processXPLoss(currentProfile.level, currentProfile.total_xp, xpLost)
+        newLevel = degradation.level
+        newXP = degradation.xp
+        newRank = degradation.rank
+      }
+
+      if (!currentProfile.is_pro) {
+        nextStreak = 0
+      }
+    }
+
+    const profileUpdates: any = {
+      streak_days: nextStreak,
+      level: newLevel,
+      total_xp: newXP,
+      rank: newRank,
+      ...userStats,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (shieldConsumed) {
+      profileUpdates.penalty_shield_used_this_week = false
+    }
+
+    await adminDb
+      .from('profiles')
+      .update(profileUpdates)
+      .eq('id', profile.id)
+
+    // Log stat history coordinates for qDate
+    await adminDb.from('stat_history').insert({
+      user_id: profile.id,
+      date: qDate,
+      attack_power: userStats.attack_power,
+      intelligence: userStats.intelligence,
+      endurance: userStats.endurance,
+      stamina: userStats.stamina,
+      exercise: userStats.exercise,
+      skills: userStats.skills,
+    })
+  }
+
+  // Handle case where yesterday had absolutely no quests generated (e.g. they logged in today after some offline days with zero activity)
+  // We still want to log a history entry for yesterday if there is none, so they have consecutive daily tracking rows.
+  const yesterdayDateObj = new Date()
+  yesterdayDateObj.setUTCDate(yesterdayDateObj.getUTCDate() - 1)
+  const yesterday = yesterdayDateObj.toISOString().split('T')[0]
+
+  const { data: yesterdayHistory } = await adminDb
+    .from('stat_history')
+    .select('id')
+    .eq('user_id', profile.id)
+    .eq('date', yesterday)
+    .maybeSingle()
+
+  if (!yesterdayHistory) {
+    const { data: latestProfile } = await adminDb
+      .from('profiles')
+      .select('*')
+      .eq('id', profile.id)
+      .single()
+
+    if (latestProfile) {
+      await adminDb.from('stat_history').insert({
+        user_id: profile.id,
+        date: yesterday,
+        attack_power: latestProfile.attack_power,
+        intelligence: latestProfile.intelligence,
+        endurance: latestProfile.endurance,
+        stamina: latestProfile.stamina,
+        exercise: latestProfile.exercise,
+        skills: latestProfile.skills,
+      })
+    }
+  }
 }

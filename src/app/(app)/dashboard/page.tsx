@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import DashboardHub from '@/components/DashboardHub'
 import { getProfile } from '@/app/actions/profile'
-import { generateDailyQuests } from '@/lib/quests-generator'
+import { generateDailyQuests, checkAndRunDailyReset } from '@/lib/quests-generator'
 import { Profile } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -17,11 +17,17 @@ export default async function DashboardPage() {
   }
 
   // 2. Fetch profile using getProfile helper (triggers automatic recovery fallbacks)
-  const profile = await getProfile()
+  let profile = await getProfile()
 
   if (!profile) {
     redirect('/login')
   }
+
+  // 3. Run self-healing daily reset coordinates evaluations
+  await checkAndRunDailyReset(profile as Profile)
+
+  // Refetch profile to get the up-to-date stats/levels after resets
+  profile = await getProfile()
 
   const today = new Date().toISOString().split('T')[0]
 
