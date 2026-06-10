@@ -68,3 +68,84 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #374151;
 }
+
+/* Solo Leveling Glitch & Hologram styles */
+@keyframes scanline {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+.animate-scanline {
+  animation: scanline 8s linear infinite;
+}
+
+@keyframes digital-flicker {
+  0%, 19.999%, 22%, 62.999%, 64%, 64.999%, 70%, 100% {
+    opacity: 0.99;
+    filter: hue-rotate(0deg) saturate(1);
+  }
+  20%, 21.999%, 63%, 63.999%, 65%, 69.999% {
+    opacity: 0.4;
+    filter: hue-rotate(90deg) saturate(1.5);
+  }
+}
+
+.animate-digital-flicker {
+  animation: digital-flicker 5s linear infinite;
+}
+
+.glow-text-cyan {
+  text-shadow: 0 0 6px rgba(0, 240, 255, 0.7), 0 0 15px rgba(0, 240, 255, 0.4), 0 0 30px rgba(0, 240, 255, 0.2);
+}
+
+.glow-text-brand-purple {
+  text-shadow: 0 0 6px rgba(139, 92, 246, 0.7), 0 0 15px rgba(139, 92, 246, 0.4), 0 0 30px rgba(139, 92, 246, 0.2);
+}
+
+/* Sci-fi text border styling */
+.text-stroke-cyan {
+  -webkit-text-stroke: 1px rgba(0, 240, 255, 0.4);
+}
+
+/* Awakening Singularity Core Animations */
+@keyframes rotate-cw {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes rotate-ccw {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(-360deg); }
+}
+
+@keyframes laser-sweep {
+  0% { top: 0%; opacity: 0; }
+  10% { opacity: 0.8; }
+  90% { opacity: 0.8; }
+  100% { top: 100%; opacity: 0; }
+}
+
+.animate-rotate-cw {
+  animation: rotate-cw 20s linear infinite;
+}
+
+.animate-rotate-ccw {
+  animation: rotate-ccw 15s linear infinite;
+}
+
+.animate-laser-sweep {
+  animation: laser-sweep 4s ease-in-out infinite;
+}
+
+@keyframes crt-flicker {
+  0%, 100% { opacity: 0.98; }
+  50% { opacity: 1; }
+}
+
+.crt-flicker-overlay {
+  animation: crt-flicker 0.2s infinite;
+}
