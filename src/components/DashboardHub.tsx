@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { Profile, DailyQuest, CustomQuest, AdminNotification, StatCategory } from '@/types'
 import { completeDailyQuest, completeCustomQuest, claimExampleQuest } from '@/app/actions/quests'
+import { dismissProWelcomePopup } from '@/app/actions/bkash'
 import CelebrationOverlays from './CelebrationOverlays'
 
 // ─── Static Example Quests (shown when hunter has no custom daily quests) ────
@@ -114,7 +115,14 @@ export default function DashboardHub({
   const router = useRouter()
   const [loadingQuestId, setLoadingQuestId] = useState<string | null>(null)
   const [timeLeft, setTimeLeft] = useState<string>('')
+  const [mobileTab, setMobileTab] = useState<'daily' | 'custom' | 'status'>('daily')
+  const [showProPopup, setShowProPopup] = useState(!!profile.show_pro_welcome_popup)
   const lastDateRef = useRef<number>(new Date().getDate())
+
+  const handleCloseProPopup = async () => {
+    setShowProPopup(false)
+    await dismissProWelcomePopup()
+  }
 
   // Track which example quests were claimed this session
   const [claimedExampleIds, setClaimedExampleIds] = useState<Set<string>>(() => {
@@ -285,7 +293,6 @@ export default function DashboardHub({
     } else if (result.error) { alert(result.error) }
   }
 
-  // ─── Computed Stats ───────────────────────────────────────────────────────
   const isUsingExamples = dailyQuests.length === 0
   const day = new Date().getUTCDay()
   const isWeekend = day === 0 || day === 6
@@ -310,7 +317,7 @@ export default function DashboardHub({
   }
 
   return (
-    <div className="space-y-8 font-mono text-gray-200">
+    <div className="space-y-6 sm:space-y-8 font-mono text-gray-200">
       {/* Celebration Overlays */}
       <CelebrationOverlays
         levelUpActive={celeb.active && celeb.levelUp}
@@ -347,15 +354,66 @@ export default function DashboardHub({
         </motion.div>
       )}
 
+      {/* Compact Status Header for Mobile (Hidden on Desktop) */}
+      <div className="md:hidden flex justify-between items-center bg-[#02050c]/80 border border-slate-900 rounded-lg p-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">RANK</span>
+          <span className="text-xs font-black text-brand-blue uppercase glow-text-blue">{profile.rank}</span>
+          <span className="w-1 h-1 rounded-full bg-slate-800" />
+          <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">LVL</span>
+          <span className="text-xs font-black text-white">{profile.level}</span>
+        </div>
+        <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/25 px-2 py-0.5 rounded text-brand-gold text-[9px] font-bold">
+          <Flame size={10} className="fill-brand-gold text-brand-gold" />
+          <span>STREAK: {profile.streak_days} DAYS</span>
+        </div>
+      </div>
+
+      {/* Mobile Tab Switcher (Visible on mobile/tablet, hidden on desktop) */}
+      <div className="md:hidden flex border border-slate-900 gap-1 p-1 bg-slate-950/80 rounded-lg">
+        <button
+          onClick={() => setMobileTab('daily')}
+          className={`flex-1 py-2 text-center text-[10px] font-black uppercase tracking-widest rounded transition-all cursor-pointer ${
+            mobileTab === 'daily'
+              ? 'bg-brand-blue/15 text-brand-blue border border-brand-blue/30 glow-blue'
+              : 'text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          [ DIRECTIVES ]
+        </button>
+        <button
+          onClick={() => setMobileTab('custom')}
+          className={`flex-1 py-2 text-center text-[10px] font-black uppercase tracking-widest rounded transition-all cursor-pointer ${
+            mobileTab === 'custom'
+              ? 'bg-brand-purple/15 text-brand-purple border border-brand-purple/30 glow-purple'
+              : 'text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          [ TRIALS ]
+        </button>
+        <button
+          onClick={() => setMobileTab('status')}
+          className={`flex-1 py-2 text-center text-[10px] font-black uppercase tracking-widest rounded transition-all cursor-pointer ${
+            mobileTab === 'status'
+              ? 'bg-brand-gold/15 text-brand-gold border border-brand-gold/30 glow-gold'
+              : 'text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          [ STATUS ]
+        </button>
+      </div>
+
       {/* Main Hologram Welcome Card */}
-      <div className="relative overflow-hidden rounded-lg border-2 border-brand-blue/60 bg-[#02050c]/90 p-6 lg:p-8 glow-blue">
+      <div className={`relative overflow-hidden rounded-lg border-2 border-brand-blue/60 bg-[#02050c]/90 p-4 sm:p-6 lg:p-8 glow-blue ${
+        mobileTab === 'status' ? 'block' : 'hidden md:block'
+      }`}>
         <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-brand-blue" />
         <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-brand-blue" />
         <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-brand-blue" />
         <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-brand-blue" />
         <div className="absolute inset-0 bg-gradient-to-r from-brand-blue/5 to-transparent pointer-events-none" />
 
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6">
           <div>
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
               <h1 className="text-xl lg:text-2xl font-black tracking-widest text-white uppercase">
@@ -411,7 +469,9 @@ export default function DashboardHub({
         <motion.div 
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="bg-brand-gold/5 border-2 border-brand-gold/40 rounded-lg p-5 relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4 glow-gold"
+          className={`bg-brand-gold/5 border-2 border-brand-gold/40 rounded-lg p-4 sm:p-5 relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4 glow-gold ${
+            mobileTab === 'status' ? 'flex' : 'hidden md:flex'
+          }`}
         >
           <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-brand-gold" />
           <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-brand-gold" />
@@ -433,10 +493,12 @@ export default function DashboardHub({
       )}
 
       {/* Grid: Daily System Quests & Quick Quests */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
         
         {/* Left Column (2/3): Daily Quests */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className={`lg:col-span-2 space-y-4 ${
+          mobileTab === 'daily' ? 'block' : 'hidden md:block'
+        }`}>
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold tracking-widest text-brand-blue glow-text-blue uppercase">
@@ -449,9 +511,29 @@ export default function DashboardHub({
                 </span>
               )}
             </div>
-            <div className="text-[10px] text-gray-500 flex items-center gap-1 font-mono uppercase">
-              <Clock size={12} className="animate-pulse text-brand-blue" />
-              resets in {timeLeft || '--:--:--'}
+          </div>
+
+          {/* High-visibility Reset Timer Card */}
+          <div className="relative overflow-hidden bg-[#02050c]/85 border border-brand-blue/30 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 glow-blue">
+            <div className="absolute top-0 left-0 w-2.5 h-2.5 border-t-2 border-l-2 border-brand-blue/60" />
+            <div className="absolute bottom-0 right-0 w-2.5 h-2.5 border-b-2 border-r-2 border-brand-blue/60" />
+            
+            <div className="flex items-center gap-3">
+              <Clock className="text-brand-blue animate-pulse shrink-0" size={20} />
+              <div>
+                <span className="text-[9px] text-brand-blue font-black uppercase tracking-widest block glow-text-blue">
+                  [ SYSTEM OVERRIDE: RESET SEQUENCE ]
+                </span>
+                <span className="text-xs text-gray-300 uppercase tracking-wider block font-bold mt-0.5">
+                  Remaining time to synchronize daily coordinates
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center bg-slate-950/90 px-5 py-2.5 border border-slate-900 rounded-md self-stretch sm:self-auto min-w-[150px] shadow-inner">
+              <span className="text-xl sm:text-2xl font-black text-brand-blue glow-text-blue tracking-widest font-mono select-none">
+                {timeLeft || '--:--:--'}
+              </span>
             </div>
           </div>
 
@@ -494,18 +576,18 @@ export default function DashboardHub({
               return (
                 <motion.div
                   key={quest.id}
-                  whileHover={{ scale: 1.005 }}
-                  className={`relative overflow-hidden bg-[#02050c]/95 border rounded-lg p-5 transition-all flex items-start justify-between gap-4 ${
+                  whileHover={{ scale: 1.002 }}
+                  className={`relative overflow-hidden bg-[#02050c]/95 border rounded-lg p-4 sm:p-5 transition-all flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 ${
                     isCompleted
                       ? 'border-slate-900/60 opacity-50'
                       : 'border-slate-850 hover:border-brand-blue/50'
                   }`}
                 >
-                  <div className="absolute top-0 left-0 w-2.5 h-2.5 border-t-2 border-l-2 border-brand-blue/40" />
-                  <div className="absolute bottom-0 right-0 w-2.5 h-2.5 border-b-2 border-r-2 border-brand-blue/40" />
+                  <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-brand-blue/40" />
+                  <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-brand-blue/40" />
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <span className={`px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wider ${statColor[quest.stat_category as StatCategory]}`}>
                         {quest.stat_category.replace('_', ' ')}
                       </span>
@@ -521,15 +603,15 @@ export default function DashboardHub({
                     <h3 className={`text-sm font-bold tracking-wide ${isCompleted ? 'line-through text-gray-600' : 'text-white'}`}>
                       {quest.title}
                     </h3>
-                    <p className="text-xs text-gray-400 mt-1">
+                    <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
                       {quest.description}
                     </p>
                   </div>
 
-                  <div className="shrink-0 flex flex-col sm:flex-row items-center gap-2 pt-2">
+                  <div className="flex items-center gap-3 w-full sm:w-auto justify-end mt-2 sm:mt-0 pt-3 border-t border-slate-900/60 sm:border-t-0 sm:pt-0 shrink-0">
                     <button
                       onClick={() => openQuestModal(quest, isExample ? 'example' : 'system', false)}
-                      className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-950 hover:bg-slate-900 text-gray-400 hover:text-white border border-slate-900 hover:border-slate-800 font-extrabold font-mono text-[10px] uppercase rounded transition-all cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-gray-455 hover:text-white border border-slate-900 hover:border-slate-800 font-extrabold font-mono text-[10px] uppercase rounded transition-all cursor-pointer"
                     >
                       <Info size={12} />
                       Details
@@ -541,7 +623,7 @@ export default function DashboardHub({
                       <button
                         onClick={() => openQuestModal(quest, isExample ? 'example' : 'system', true)}
                         disabled={loadingQuestId === quest.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-blue/10 hover:bg-brand-blue/25 text-brand-blue border border-brand-blue/40 hover:border-brand-blue font-extrabold font-mono text-[10px] uppercase rounded transition-all glow-blue disabled:opacity-50 cursor-pointer"
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-blue/10 hover:bg-brand-blue/25 text-brand-blue border border-brand-blue/40 hover:border-brand-blue font-extrabold font-mono text-[10px] uppercase rounded transition-all glow-blue disabled:opacity-50 cursor-pointer"
                       >
                         {loadingQuestId === quest.id ? (
                           <span className="h-3.5 w-3.5 animate-spin rounded-full border border-brand-blue border-t-transparent" />
@@ -568,7 +650,9 @@ export default function DashboardHub({
         </div>
 
         {/* Right Column (1/3): Custom Quests List */}
-        <div className="space-y-4">
+        <div className={`space-y-4 ${
+          mobileTab === 'custom' ? 'block' : 'hidden md:block'
+        }`}>
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold tracking-widest text-brand-purple glow-text-purple uppercase">
               [ QUICK ACTIVE TRIALS ]
@@ -905,6 +989,87 @@ export default function DashboardHub({
 
               <div className="mt-6 text-[9px] text-gray-500 uppercase tracking-widest">
                 [ TRANSMISSION SYNC RATE: SECURE ]
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* Pro Awakening Success Popup Modal */}
+      <AnimatePresence>
+        {showProPopup && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={handleCloseProPopup}
+              className="absolute inset-0 bg-black/90 backdrop-blur-md"
+            />
+
+            {/* Modal Box */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-md overflow-hidden rounded-lg border-2 border-brand-gold bg-[#02050c]/98 p-6 sm:p-8 shadow-2xl font-mono text-gray-200 z-10 glow-gold"
+            >
+              {/* Scanline overlay */}
+              <div className="absolute inset-0 pointer-events-none opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 50%, rgba(0,0,0,0.2) 50%)', backgroundSize: '100% 4px' }} />
+              
+              {/* RPG corners */}
+              {['top-0 left-0 border-t-4 border-l-4', 'top-0 right-0 border-t-4 border-r-4', 'bottom-0 left-0 border-b-4 border-l-4', 'bottom-0 right-0 border-b-4 border-r-4'].map((cls, i) => (
+                <div key={i} className={`absolute w-4 h-4 ${cls} border-brand-gold`} />
+              ))}
+
+              <div className="text-center space-y-4">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-brand-gold animate-ping" />
+                  <span className="text-[10px] font-black tracking-widest text-brand-gold uppercase animate-pulse">
+                    [ SYSTEM SIGNAL: AWAKENING COMPLETE ]
+                  </span>
+                </div>
+
+                <Sparkles className="mx-auto text-brand-gold animate-bounce" size={48} />
+
+                <h3 className="text-base sm:text-lg font-black tracking-widest text-white uppercase mt-1 glow-text-gold">
+                  PRO STATUS ACTIVATED
+                </h3>
+
+                <p className="text-xs text-gray-300 leading-relaxed uppercase">
+                  Hunter! Your limits have been overridden. Status parameters successfully synchronized with Monarch credentials.
+                </p>
+
+                <div className="p-4 bg-amber-500/5 border border-brand-gold/20 rounded-md text-left space-y-2">
+                  <span className="text-[9px] text-brand-gold font-black uppercase tracking-widest block mb-2">
+                    [ UNLOCKED PERKS SYNC ]
+                  </span>
+                  <div className="space-y-1.5 text-[10px] text-gray-300">
+                    <div className="flex items-center gap-2">
+                      <span className="text-brand-gold font-bold">✓</span>
+                      <span>UNLIMITED ACTIVE CUSTOM TRIALS</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-brand-gold font-bold">✓</span>
+                      <span>2X XP MULTIPLIER ON WEEKENDS</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-brand-gold font-bold">✓</span>
+                      <span>WEEKLY STATUS PENALTY SHIELD ACTIVE</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-brand-gold font-bold">✓</span>
+                      <span>COMPLETE ARCHIVE LOG ACCESS (STAT HISTORY)</span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleCloseProPopup}
+                  className="w-full mt-4 py-2.5 bg-brand-gold hover:bg-yellow-400 text-black font-black text-xs uppercase tracking-widest glow-gold transition-all cursor-pointer"
+                >
+                  [ ENTER THE SYSTEM ]
+                </button>
               </div>
             </motion.div>
           </div>

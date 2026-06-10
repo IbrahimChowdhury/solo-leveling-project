@@ -16,6 +16,7 @@ export interface Profile {
   streak_days: number
   is_pro: boolean
   pro_expires_at: string | null
+  show_pro_welcome_popup?: boolean
   penalty_shield_used_this_week: boolean
   is_admin: boolean
   created_at: string
@@ -112,4 +113,32 @@ export interface DashboardStats {
   revenue: number
   proSubscribers: number
   avgLevel: number
+}
+
+export interface BkashConfig {
+  id: number
+  number: string
+  price_1_month: number
+  price_3_months: number
+  price_6_months: number
+  price_1_year: number
+  updated_at: string
+}
+
+export interface BkashRequest {
+  id: string
+  user_id: string
+  sender_number: string
+  transaction_id: string
+  package_type: '1_month' | '3_months' | '6_months' | '1_year'
+  amount: number
+  status: 'pending' | 'approved' | 'rejected'
+  admin_notes: string | null
+  created_at: string
+  updated_at: string
+  profiles?: {
+    display_name: string
+    avatar_url: string | null
+  }
+  email?: string
 }

@@ -2,7 +2,7 @@ import { getProfile } from '@/app/actions/profile'
 import Sidebar from '@/components/Sidebar'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { BarChart, Users, Bell } from 'lucide-react'
+import { BarChart, Users, Bell, CreditCard } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +55,12 @@ export default async function AdminLayout({
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-gray-300 hover:text-white hover:border-slate-700 transition-all"
             >
               <Bell size={14} /> Broadcasts
+            </Link>
+            <Link 
+              href="/admin/bkash" 
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-gray-300 hover:text-white hover:border-slate-700 transition-all"
+            >
+              <CreditCard size={14} /> bKash Payments
             </Link>
           </div>
         </div>

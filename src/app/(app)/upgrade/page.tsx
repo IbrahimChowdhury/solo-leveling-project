@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import UpgradeOptions from '@/components/UpgradeOptions'
 import { Profile } from '@/types'
+import { getBkashConfig, getUserRequests } from '@/app/actions/bkash'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,5 +26,15 @@ export default async function UpgradePage() {
     redirect('/login')
   }
 
-  return <UpgradeOptions profile={profile as Profile} />
+  // Fetch bKash configurations and user payment requests
+  const bkashConfig = await getBkashConfig()
+  const userRequests = await getUserRequests()
+
+  return (
+    <UpgradeOptions 
+      profile={profile as Profile} 
+      bkashConfig={bkashConfig}
+      initialRequests={userRequests}
+    />
+  )
 }

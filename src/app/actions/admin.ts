@@ -3,6 +3,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getRankForLevel } from '@/lib/game'
 import { revalidatePath, unstable_cache, updateTag } from 'next/cache'
+import { BkashRequest } from '@/types'
 
 async function checkAdminOrThrow() {
   const supabase = await createClient()
@@ -327,4 +328,134 @@ const getCachedNotifications = unstable_cache(
 export async function adminGetNotifications() {
   await checkAdminOrThrow()
   return getCachedNotifications()
+}
+
+export async function adminGetBkashRequests(): Promise<BkashRequest[]> {
+  await checkAdminOrThrow()
+  const adminDb = createAdminClient()
+
+  // Fetch all bkash requests and join with profile display details
+  const { data: requests, error } = await adminDb
+    .from('bkash_requests')
+    .select('*, profiles(display_name, avatar_url)')
+    .order('created_at', { ascending: false })
+
+  if (error) throw new Error(error.message)
+
+  // Fetch email metadata
+  const { data: { users: authUsers }, error: authError } = await adminDb.auth.admin.listUsers()
+  const emailMap = new Map<string, string>()
+  if (!authError && authUsers) {
+    authUsers.forEach(u => {
+      emailMap.set(u.id, u.email || '')
+    })
+  }
+
+  return (requests || []).map(r => ({
+    ...r,
+    email: emailMap.get(r.user_id) || 'N/A',
+  }))
+}
+
+export async function adminProcessBkashRequest(
+  requestId: string,
+  status: 'approved' | 'rejected',
+  adminNotes: string | null = null
+) {
+  await checkAdminOrThrow()
+  const adminDb = createAdminClient()
+
+  // 1. Fetch request details
+  const { data: request, error: fetchErr } = await adminDb
+    .from('bkash_requests')
+    .select('*')
+    .eq('id', requestId)
+    .single()
+
+  if (fetchErr || !request) throw new Error('Request details not found.')
+  if (request.status !== 'pending') throw new Error('This request has already been processed.')
+
+  // 2. Update request status
+  const { error: updateErr } = await adminDb
+    .from('bkash_requests')
+    .update({
+      status,
+      admin_notes: adminNotes,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', requestId)
+
+  if (updateErr) throw new Error(updateErr.message)
+
+  // 3. Perform profile changes if approved
+  if (status === 'approved') {
+    // Calculate expiry date based on package
+    const now = new Date()
+    let monthsToAdd = 3
+    if (request.package_type === '1_month') monthsToAdd = 1
+    else if (request.package_type === '6_months') monthsToAdd = 6
+    else if (request.package_type === '1_year') monthsToAdd = 12
+
+    const expiryDate = new Date(now.setMonth(now.getMonth() + monthsToAdd)).toISOString()
+
+    const { error: profileErr } = await adminDb
+      .from('profiles')
+      .update({
+        is_pro: true,
+        pro_expires_at: expiryDate,
+        show_pro_welcome_popup: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', request.user_id)
+
+    if (profileErr) throw new Error(profileErr.message)
+
+    // Notify user
+    await adminSendNotification(
+      '🌟 PRO AWAKENING SYSTEM UNLOCKED! Your manual bKash upgrade request has been validated and approved. Enjoy elite status perks.',
+      request.user_id
+    )
+  } else {
+    // Notify user of rejection
+    await adminSendNotification(
+      `⚠️ PRO AWAKENING FAILED: Your manual bKash upgrade request was rejected. Notes: ${adminNotes || 'Verification failed.'}`,
+      request.user_id
+    )
+  }
+
+  revalidatePath('/admin')
+  revalidatePath('/upgrade')
+  revalidatePath('/')
+  updateTag('admin-users-list')
+  updateTag('admin-analytics-data')
+  return { success: true }
+}
+
+export async function adminUpdateBkashConfig(
+  number: string,
+  price1m: number,
+  price3m: number,
+  price6m: number,
+  price1y: number
+) {
+  await checkAdminOrThrow()
+  const adminDb = createAdminClient()
+
+  const { error } = await adminDb
+    .from('bkash_config')
+    .update({
+      number: number.trim(),
+      price_1_month: price1m,
+      price_3_months: price3m,
+      price_6_months: price6m,
+      price_1_year: price1y,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', 1)
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/upgrade')
+  revalidatePath('/admin')
+  return { success: true }
 }
