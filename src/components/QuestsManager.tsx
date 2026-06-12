@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, Zap, AlertTriangle, CheckCircle, ShieldCheck, Edit3 } from 'lucide-react'
+import { Plus, Trash2, Zap, AlertTriangle, CheckCircle, ShieldCheck, Edit3, Info, X, AlertOctagon } from 'lucide-react'
 import { Profile, CustomQuest } from '@/types'
-import { addCustomQuest, deleteCustomQuest, editCustomQuest } from '@/app/actions/quests'
+import { addCustomQuest, deleteCustomQuest, editCustomQuest, completeCustomQuest } from '@/app/actions/quests'
 
 interface QuestsManagerProps {
   profile: Profile
@@ -29,6 +29,100 @@ export default function QuestsManager({
   const [repeatType, setRepeatType] = useState<'one-time' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('daily')
   const [proofRequired, setProofRequired] = useState(false)
   const [editingQuestId, setEditingQuestId] = useState<string | null>(null)
+
+  // ─── Custom Quest Layout and Sorting States ──────────────────────────────
+  const [sortBy, setSortBy] = useState<'created' | 'status' | 'priority' | 'category' | 'title'>('created')
+  const [viewMode, setViewMode] = useState<'list' | 'grouped'>('list')
+  
+  // ─── Custom Quest Details Modal States ──────────────────────────────────
+  const [selectedQuest, setSelectedQuest] = useState<CustomQuest | null>(null)
+  const [confirmedChecked, setConfirmedChecked] = useState(false)
+  const [modalLoading, setModalLoading] = useState(false)
+
+  useEffect(() => {
+    const savedSort = localStorage.getItem('solo_leveling_quests_sort')
+    if (savedSort) setSortBy(savedSort as any)
+    const savedView = localStorage.getItem('solo_leveling_quests_view')
+    if (savedView) setViewMode(savedView as any)
+  }, [])
+
+  const handleSortChange = (newSort: 'created' | 'status' | 'priority' | 'category' | 'title') => {
+    setSortBy(newSort)
+    localStorage.setItem('solo_leveling_quests_sort', newSort)
+  }
+
+  const handleViewModeChange = (newView: 'list' | 'grouped') => {
+    setViewMode(newView)
+    localStorage.setItem('solo_leveling_quests_view', newView)
+  }
+
+  const isQuestCompleted = (quest: CustomQuest) => {
+    return !!(quest.next_reset_at && new Date(quest.next_reset_at) > new Date())
+  }
+
+  const getSortedQuests = (quests: CustomQuest[]) => {
+    const sorted = [...quests]
+    sorted.sort((a, b) => {
+      if (sortBy === 'status') {
+        const aComp = isQuestCompleted(a)
+        const bComp = isQuestCompleted(b)
+        if (aComp === bComp) return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        return aComp ? 1 : -1
+      }
+      if (sortBy === 'priority') {
+        if (b.xp_reward === a.xp_reward) return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        return b.xp_reward - a.xp_reward
+      }
+      if (sortBy === 'category') {
+        if (a.stat_category === b.stat_category) return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        return a.stat_category.localeCompare(b.stat_category)
+      }
+      if (sortBy === 'title') {
+        return a.title.localeCompare(b.title)
+      }
+      // 'created' (newest first)
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+    return sorted
+  }
+
+  const sortedCustomQuests = getSortedQuests(customQuests)
+
+  const groupedCustomQuests: Record<string, CustomQuest[]> = {}
+  if (viewMode === 'grouped') {
+    sortedCustomQuests.forEach(quest => {
+      const cat = quest.stat_category
+      if (!groupedCustomQuests[cat]) {
+        groupedCustomQuests[cat] = []
+      }
+      groupedCustomQuests[cat].push(quest)
+    })
+  }
+
+  const handleClaimFromModal = async () => {
+    if (!selectedQuest) return
+    setModalLoading(true)
+    const result = await completeCustomQuest(selectedQuest.id)
+    setModalLoading(false)
+    if (result.success) {
+      setSelectedQuest(null)
+      setConfirmedChecked(false)
+      setLoadingStatus('fetching')
+      router.refresh()
+      setTimeout(() => setLoadingStatus(null), 1000)
+    } else if (result.error) {
+      alert(result.error)
+    }
+  }
+
+  const statColor: Record<string, string> = {
+    attack_power: 'text-red-400 border-red-500/30 bg-red-500/10',
+    intelligence: 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10',
+    endurance: 'text-green-400 border-green-500/30 bg-green-500/10',
+    stamina: 'text-amber-400 border-amber-500/30 bg-amber-500/10',
+    exercise: 'text-orange-400 border-orange-500/30 bg-orange-500/10',
+    skills: 'text-purple-400 border-purple-500/30 bg-purple-500/10',
+  }
 
   // Enforce Quest Limits (bypassed if editing)
   const limit = profile.is_pro ? 40 : 3
@@ -388,9 +482,36 @@ export default function QuestsManager({
 
         {/* Right column (2/3): Custom Quests List */}
         <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-lg font-bold font-mono tracking-widest text-brand-blue glow-text-blue uppercase">
-            ACTIVE FORGED TRIALS
-          </h2>
+          <div className="flex justify-between items-center flex-wrap gap-4">
+            <h2 className="text-lg font-bold font-mono tracking-widest text-brand-blue glow-text-blue uppercase">
+              ACTIVE FORGED TRIALS
+            </h2>
+            
+            {/* Controls Panel */}
+            {customQuests.length > 0 && (
+              <div className="flex gap-2 items-center bg-slate-950/40 border border-slate-900 rounded-lg p-1.5">
+                <select
+                  value={sortBy}
+                  onChange={(e) => handleSortChange(e.target.value as any)}
+                  className="px-2 py-1 bg-[#02050c] border border-slate-800 rounded text-[9px] font-bold text-gray-300 focus:outline-none focus:border-brand-purple transition-all uppercase cursor-pointer"
+                >
+                  <option value="created">Created Date</option>
+                  <option value="status">Quest Status</option>
+                  <option value="priority">Priority (XP)</option>
+                  <option value="category">Stat Category</option>
+                  <option value="title">Alphabetical</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => handleViewModeChange(viewMode === 'list' ? 'grouped' : 'list')}
+                  className="px-2.5 py-1 bg-slate-900 border border-slate-800 hover:border-brand-purple/40 hover:text-brand-purple rounded text-[9px] font-bold text-gray-300 transition-all uppercase cursor-pointer"
+                >
+                  View: {viewMode === 'list' ? 'List' : 'Group'}
+                </button>
+              </div>
+            )}
+          </div>
 
           {customQuests.length === 0 ? (
             <div className="bg-[#0b0f19] border border-slate-800 rounded-xl p-10 text-center text-gray-500">
@@ -399,65 +520,308 @@ export default function QuestsManager({
             </div>
           ) : (
             <div className="space-y-4">
-              {customQuests.map((quest) => (
-                <div
-                  key={quest.id}
-                  className="bg-[#0b0f19] border border-slate-850 rounded-xl p-5 hover:border-brand-purple/20 transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
-                >
-                  <div className="space-y-2 flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] text-brand-purple font-mono uppercase tracking-wider font-semibold">
-                        {quest.stat_category.replace('_', ' ')}
-                      </span>
-                      <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] text-brand-blue font-mono uppercase tracking-wider font-semibold">
-                        Repeat: {quest.repeat_type}
-                      </span>
-                      {quest.proof_required && (
-                        <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-[10px] text-brand-gold font-mono uppercase tracking-wider font-semibold flex items-center gap-1">
-                          <ShieldCheck size={10} /> Proof Required
-                        </span>
-                      )}
-                    </div>
-
-                    <div>
-                      <h3 className="text-base font-bold text-white truncate">{quest.title}</h3>
-                      <p className="text-xs text-gray-400 mt-1">{quest.description}</p>
-                    </div>
-
-                    <div className="text-[11px] text-gray-500 font-mono">
-                      XP Reward: <span className="text-brand-purple font-semibold">+{quest.xp_reward} XP</span>
-                      {quest.last_completed_at && (
-                        <span className="ml-3">
-                          Last Completed: {new Date(quest.last_completed_at).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 w-full md:w-auto shrink-0 md:justify-end border-t md:border-t-0 pt-3 md:pt-0 border-slate-900">
-                    <button
-                      onClick={() => handleStartEdit(quest)}
-                      className={`p-2 border rounded-lg transition-all cursor-pointer flex-1 md:flex-none flex justify-center ${
-                        editingQuestId === quest.id 
-                          ? 'border-brand-purple text-brand-purple bg-brand-purple/10 glow-purple' 
-                          : 'border-slate-800 text-gray-400 hover:text-white hover:bg-slate-900'
-                      }`}
-                    >
-                      <Edit3 size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(quest.id)}
-                      className="p-2 border border-red-500/20 text-brand-red hover:bg-brand-red/10 rounded-lg transition-all cursor-pointer flex-1 md:flex-none flex justify-center"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+              {viewMode === 'grouped' ? (
+                <div className="space-y-4">
+                  {Object.keys(groupedCustomQuests).map((category) => {
+                    const list = groupedCustomQuests[category]
+                    if (!list || list.length === 0) return null
+                    return (
+                      <div key={category} className="space-y-1.5">
+                        <div className="text-[10px] font-black tracking-widest text-brand-purple/80 uppercase px-1 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-brand-purple/60" />
+                          {category.replace('_', ' ')} Directives
+                        </div>
+                        <div className="space-y-1.5">
+                          {list.map((quest) => {
+                            const isCompleted = isQuestCompleted(quest)
+                            return (
+                              <motion.div
+                                key={quest.id}
+                                onClick={() => setSelectedQuest(quest)}
+                                whileHover={{ scale: 1.02, y: -2 }}
+                                transition={{ type: 'spring', stiffness: 600, damping: 25 }}
+                                className={`flex items-center justify-between p-2.5 rounded border transition-colors duration-150 cursor-pointer select-none gap-3 ${
+                                  isCompleted 
+                                    ? 'bg-slate-950/40 border-slate-900/20 opacity-60 hover:opacity-100 hover:border-brand-purple/30 hover:shadow-[0_0_12px_rgba(139,92,246,0.1)]' 
+                                    : 'bg-[#0b0f19] border-brand-purple/20 hover:border-brand-purple/60 hover:shadow-[0_0_12px_rgba(139,92,246,0.25)]'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  {isCompleted ? (
+                                    <CheckCircle size={14} className="text-brand-purple shrink-0 fill-brand-purple/5" />
+                                  ) : (
+                                    <div className="w-3.5 h-3.5 rounded-full border border-brand-purple/40 flex items-center justify-center shrink-0">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-brand-purple/30 animate-pulse" />
+                                    </div>
+                                  )}
+                                  <span className={`text-[11px] font-bold truncate ${isCompleted ? 'line-through text-gray-500' : 'text-gray-200'}`}>
+                                    {quest.title}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${statColor[quest.stat_category]}`}>
+                                    {quest.stat_category.replace('_', ' ')}
+                                  </span>
+                                  <span className="px-1.5 py-0.5 rounded bg-brand-blue/10 border border-brand-blue/20 text-[8px] text-brand-blue font-bold">
+                                    +{quest.xp_reward} XP
+                                  </span>
+                                  <span className="px-1.5 py-0.5 rounded bg-brand-purple/10 border border-brand-purple/20 text-[8px] text-brand-purple font-bold uppercase">
+                                    {quest.repeat_type}
+                                  </span>
+                                </div>
+                              </motion.div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-              ))}
+              ) : (
+                <div className="space-y-1.5">
+                  {sortedCustomQuests.map((quest) => {
+                    const isCompleted = isQuestCompleted(quest)
+                    return (
+                      <motion.div
+                        key={quest.id}
+                        onClick={() => setSelectedQuest(quest)}
+                        whileHover={{ scale: 1.02, y: -2 }}
+                        transition={{ type: 'spring', stiffness: 600, damping: 25 }}
+                        className={`flex items-center justify-between p-2.5 rounded border transition-colors duration-150 cursor-pointer select-none gap-3 ${
+                          isCompleted 
+                            ? 'bg-slate-950/40 border-slate-900/20 opacity-60 hover:opacity-100 hover:border-brand-purple/30 hover:shadow-[0_0_12px_rgba(139,92,246,0.1)]' 
+                            : 'bg-[#0b0f19] border-brand-purple/20 hover:border-brand-purple/60 hover:shadow-[0_0_12px_rgba(139,92,246,0.25)]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {isCompleted ? (
+                            <CheckCircle size={14} className="text-brand-purple shrink-0 fill-brand-purple/5" />
+                          ) : (
+                            <div className="w-3.5 h-3.5 rounded-full border border-brand-purple/40 flex items-center justify-center shrink-0">
+                              <div className="w-1.5 h-1.5 rounded-full bg-brand-purple/30 animate-pulse" />
+                            </div>
+                          )}
+                          <span className={`text-[11px] font-bold truncate ${isCompleted ? 'line-through text-gray-500' : 'text-gray-200'}`}>
+                            {quest.title}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${statColor[quest.stat_category]}`}>
+                            {quest.stat_category.replace('_', ' ')}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-brand-blue/10 border border-brand-blue/20 text-[8px] text-brand-blue font-bold">
+                            +{quest.xp_reward} XP
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-brand-purple/10 border border-brand-purple/20 text-[8px] text-brand-purple font-bold uppercase">
+                            {quest.repeat_type}
+                          </span>
+                        </div>
+                      </motion.div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
+        </div>
       </div>
-      </div>
+
+      {/* Custom Quest Details Modal */}
+      <AnimatePresence>
+        {selectedQuest && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => { if (!modalLoading) { setSelectedQuest(null); setConfirmedChecked(false) } }}
+              className="absolute inset-0 bg-black/85 backdrop-blur-md"
+            />
+
+            {/* Modal */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-full max-w-md overflow-hidden rounded-lg border-2 border-brand-purple bg-[#02050c]/98 p-6 shadow-2xl font-mono text-gray-200 z-10 glow-purple"
+            >
+              {/* Bracket corners */}
+              {['top-0 left-0 border-t-4 border-l-4', 'top-0 right-0 border-t-4 border-r-4', 'bottom-0 left-0 border-b-4 border-l-4', 'bottom-0 right-0 border-b-4 border-r-4'].map((cls, i) => (
+                <div key={i} className="absolute w-4 h-4 border-brand-purple" />
+              ))}
+
+              {/* Close */}
+              <button
+                onClick={() => { if (!modalLoading) { setSelectedQuest(null); setConfirmedChecked(false) } }}
+                disabled={modalLoading}
+                className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <X size={18} />
+              </button>
+
+              {/* Header */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-brand-purple animate-pulse" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-brand-purple">
+                    [ CUSTOM TRIAL PARAMETERS ]
+                  </span>
+                </div>
+                <h2 className="text-sm font-black tracking-widest text-white uppercase mt-1">
+                  Quest Details & Settings
+                </h2>
+              </div>
+
+              <div className="h-[1px] w-full bg-gradient-to-r from-brand-purple/35 to-transparent mb-4" />
+
+              {/* Details */}
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <span className={`px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wider ${statColor[selectedQuest.stat_category]}`}>
+                    STAT: {selectedQuest.stat_category.replace('_', ' ')}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-900 text-[9px] text-brand-purple font-bold uppercase tracking-wider">
+                    REPEAT: {selectedQuest.repeat_type}
+                  </span>
+                  {selectedQuest.proof_required && (
+                    <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-[9px] text-brand-gold font-bold uppercase tracking-wider flex items-center gap-1">
+                      <ShieldCheck size={10} /> PROOF REQUIRED
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-[9px] text-gray-500 uppercase tracking-widest block mb-0.5">Objective Title</span>
+                  <span className="text-xs font-bold text-white tracking-wide block bg-slate-950/60 p-2 border border-slate-900 rounded">
+                    {selectedQuest.title}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-[9px] text-gray-500 uppercase tracking-widest block mb-0.5">Objective Requirements</span>
+                  <p className="text-xs text-gray-300 leading-relaxed bg-slate-950/60 p-3 border border-slate-900 rounded whitespace-pre-wrap">
+                    {selectedQuest.description || 'No requirements specified.'}
+                  </p>
+                </div>
+
+                <div className="p-3 border border-brand-purple/20 bg-brand-purple/5 rounded">
+                  <span className="text-[9px] font-black uppercase tracking-widest block mb-2 text-brand-purple">
+                    [ COORDINATES SYNC REWARD ]
+                  </span>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-slate-950/50 p-2 border border-slate-900/60 rounded">
+                      <span className="text-[9px] text-gray-500 uppercase block">XP Bounty</span>
+                      <span className="text-white font-bold">+{selectedQuest.xp_reward} XP</span>
+                    </div>
+                    <div className="bg-slate-950/50 p-2 border border-slate-900/60 rounded">
+                      <span className="text-[9px] text-gray-500 uppercase block">Stat Upgrade</span>
+                      <span className="text-white font-bold">
+                        {selectedQuest.stat_category.replace('_', ' ').toUpperCase()} +{Math.max(2, Math.min(10, Math.floor(selectedQuest.xp_reward / 10)))}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="h-[1px] w-full bg-gradient-to-r from-brand-purple/15 to-transparent my-4" />
+
+              {/* Status Section */}
+              {isQuestCompleted(selectedQuest) ? (
+                <div className="bg-brand-purple/10 border border-brand-purple/35 rounded p-3 text-center mb-6 animate-pulse">
+                  <p className="text-xs text-brand-purple font-bold uppercase tracking-widest flex items-center justify-center gap-1.5">
+                    <CheckCircle size={14} /> [ STATUS: OBJECTIVE CLEAR ]
+                  </p>
+                  <p className="text-[9px] text-gray-400 mt-1 uppercase">
+                    This coordinates slot has already been synchronized for today.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4 mb-6">
+                  <div className="bg-brand-red/5 border border-brand-red/35 rounded p-3 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1.5 h-1.5 border-t-2 border-l-2 border-brand-red" />
+                    <div className="absolute bottom-0 right-0 w-1.5 h-1.5 border-b-2 border-r-2 border-brand-red" />
+                    <div className="flex gap-2">
+                      <AlertOctagon className="text-brand-red shrink-0 mt-0.5 animate-pulse" size={14} />
+                      <p className="text-[9px] text-brand-red uppercase tracking-wider leading-relaxed">
+                        <strong>Warning:</strong> Only claim rewards if you actually completed the quest criteria. False claims disrupt system stats alignment.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Confirmation Checkbox */}
+                  <label className="flex items-center gap-3 p-2 border border-slate-900 rounded bg-slate-950/40 hover:bg-slate-950/80 transition-all cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={confirmedChecked}
+                      onChange={(e) => setConfirmedChecked(e.target.checked)}
+                      disabled={modalLoading}
+                      className="h-4 w-4 bg-slate-950 border border-brand-purple text-brand-purple rounded focus:ring-0 cursor-pointer disabled:opacity-50"
+                    />
+                    <span className="text-[9px] text-gray-300 uppercase select-none leading-none">
+                      I confirm that I completed all required trials.
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {/* Actions Grid */}
+              <div className="flex flex-wrap gap-2 justify-between items-center">
+                {/* Left actions: Edit and Delete */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      handleStartEdit(selectedQuest)
+                      setSelectedQuest(null)
+                    }}
+                    disabled={modalLoading}
+                    className="p-2 border border-slate-800 hover:border-brand-purple/40 hover:text-brand-purple bg-slate-900/50 hover:bg-slate-900 rounded-lg transition-all cursor-pointer disabled:opacity-50"
+                    title="Edit Quest"
+                  >
+                    <Edit3 size={16} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleDelete(selectedQuest.id)
+                      setSelectedQuest(null)
+                    }}
+                    disabled={modalLoading}
+                    className="p-2 border border-red-500/20 text-brand-red hover:bg-brand-red/10 rounded-lg transition-all cursor-pointer disabled:opacity-50"
+                    title="Purge Quest"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+
+                {/* Right actions: Cancel / Claim */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setSelectedQuest(null); setConfirmedChecked(false) }}
+                    disabled={modalLoading}
+                    className="px-4 py-2 border border-slate-800 hover:border-slate-700 bg-slate-900/50 hover:bg-slate-900 text-gray-400 hover:text-white font-extrabold text-[10px] uppercase rounded transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    Abort
+                  </button>
+
+                  {!isQuestCompleted(selectedQuest) && (
+                    <button
+                      onClick={handleClaimFromModal}
+                      disabled={modalLoading || !confirmedChecked}
+                      className="px-5 py-2 font-black text-[10px] uppercase tracking-wider rounded transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed bg-brand-purple text-white glow-purple hover:bg-violet-600"
+                    >
+                      {modalLoading ? (
+                        <span className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
+                      ) : (
+                        '[ CLAIM REWARD ]'
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Dynamic System Loading Overlay */}
       <AnimatePresence>

@@ -131,6 +131,32 @@ export default function DashboardHub({
     return new Set(cached || [])
   })
 
+  // ─── Custom Quest Layout and Sorting States ──────────────────────────────
+  const [sortBy, setSortBy] = useState<'created' | 'status' | 'priority' | 'category' | 'title'>('created')
+  const [viewMode, setViewMode] = useState<'list' | 'grouped'>('list')
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  // ─── Example Quest Warning Interception States ────────────────────────────
+  const [showExampleWarning, setShowExampleWarning] = useState(false)
+  const [pendingExampleQuest, setPendingExampleQuest] = useState<ExampleQuest | null>(null)
+
+  useEffect(() => {
+    const savedSort = localStorage.getItem('solo_leveling_quests_sort')
+    if (savedSort) setSortBy(savedSort as any)
+    const savedView = localStorage.getItem('solo_leveling_quests_view')
+    if (savedView) setViewMode(savedView as any)
+  }, [])
+
+  const handleSortChange = (newSort: 'created' | 'status' | 'priority' | 'category' | 'title') => {
+    setSortBy(newSort)
+    localStorage.setItem('solo_leveling_quests_sort', newSort)
+  }
+
+  const handleViewModeChange = (newView: 'list' | 'grouped') => {
+    setViewMode(newView)
+    localStorage.setItem('solo_leveling_quests_view', newView)
+  }
+
   // Cache server-provided data to localStorage for instant re-render on next visit
   useEffect(() => {
     const today = new Date().toISOString().split('T')[0]
@@ -223,24 +249,19 @@ export default function DashboardHub({
   // ─── Claim from Modal ─────────────────────────────────────────────────────
   const handleClaimFromModal = async () => {
     if (!selectedQuest || !selectedQuestType) return
+
+    if (selectedQuestType === 'example') {
+      // Intercept example completions with the warning dialog
+      setPendingExampleQuest(selectedQuest as ExampleQuest)
+      setShowExampleWarning(true)
+      return
+    }
+
     setModalLoading(true)
 
     let result: { success?: boolean; error?: string; leveledUp?: boolean; rankedUp?: boolean; newLevel?: number; newRank?: string; xpGained?: number; statGained?: string; statIncrease?: number }
 
-    if (selectedQuestType === 'example') {
-      const eq = selectedQuest as ExampleQuest
-      result = await claimExampleQuest(eq.title, eq.description, eq.stat_category, eq.xp_reward)
-      if (result.success) {
-        // Mark as claimed in local state + cache
-        setClaimedExampleIds(prev => {
-          const next = new Set(prev)
-          next.add(eq.id)
-          const today = new Date().toISOString().split('T')[0]
-          cacheSet('claimed_examples_' + today, Array.from(next))
-          return next
-        })
-      }
-    } else if (selectedQuestType === 'system') {
+    if (selectedQuestType === 'system') {
       result = await completeDailyQuest((selectedQuest as DailyQuest).id)
     } else {
       result = await completeCustomQuest((selectedQuest as CustomQuest).id)
@@ -249,6 +270,39 @@ export default function DashboardHub({
     setModalLoading(false)
 
     if (result.success) {
+      setSelectedQuest(null)
+      setConfirmedChecked(false)
+      if (result.leveledUp || result.rankedUp) {
+        setCeleb({
+          active: true,
+          levelUp: result.leveledUp || false,
+          rankUp: result.rankedUp || false,
+          oldLevel: profile.level,
+          newLevel: result.newLevel || profile.level,
+          oldRank: profile.rank,
+          newRank: result.newRank || profile.rank,
+        })
+      }
+      router.refresh()
+    } else if (result.error) {
+      alert(result.error)
+    }
+  }
+
+  // ─── Actual execution logic for claiming example quests ──────────────────
+  const performClaimExampleQuest = async (eq: ExampleQuest) => {
+    setModalLoading(true)
+    const result = await claimExampleQuest(eq.title, eq.description, eq.stat_category, eq.xp_reward)
+    setModalLoading(false)
+
+    if (result.success) {
+      setClaimedExampleIds(prev => {
+        const next = new Set(prev)
+        next.add(eq.id)
+        const today = new Date().toISOString().split('T')[0]
+        cacheSet('claimed_examples_' + today, Array.from(next))
+        return next
+      })
       setSelectedQuest(null)
       setConfirmedChecked(false)
       if (result.leveledUp || result.rankedUp) {
@@ -293,7 +347,48 @@ export default function DashboardHub({
     } else if (result.error) { alert(result.error) }
   }
 
-  const isUsingExamples = dailyQuests.length === 0
+  const isUsingExamples = dailyQuests.length === 0 && customQuests.length === 0
+
+  const getSortedQuests = (quests: CustomQuest[]) => {
+    const sorted = [...quests]
+    sorted.sort((a, b) => {
+      if (sortBy === 'status') {
+        const aComp = isQuestCompleted(a, 'custom')
+        const bComp = isQuestCompleted(b, 'custom')
+        if (aComp === bComp) return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        return aComp ? 1 : -1
+      }
+      if (sortBy === 'priority') {
+        if (b.xp_reward === a.xp_reward) return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        return b.xp_reward - a.xp_reward
+      }
+      if (sortBy === 'category') {
+        if (a.stat_category === b.stat_category) return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        return a.stat_category.localeCompare(b.stat_category)
+      }
+      if (sortBy === 'title') {
+        return a.title.localeCompare(b.title)
+      }
+      // 'created' (newest first)
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+    return sorted
+  }
+
+  const sortedCustomQuests = getSortedQuests(customQuests)
+  const displayedCustomQuests = isExpanded ? sortedCustomQuests : sortedCustomQuests.slice(0, 5)
+
+  // Group by category if grouped view is enabled
+  const groupedCustomQuests: Record<StatCategory, CustomQuest[]> = {} as any
+  if (viewMode === 'grouped') {
+    displayedCustomQuests.forEach(quest => {
+      const cat = quest.stat_category as StatCategory
+      if (!groupedCustomQuests[cat]) {
+        groupedCustomQuests[cat] = []
+      }
+      groupedCustomQuests[cat].push(quest)
+    })
+  }
   const day = new Date().getUTCDay()
   const isWeekend = day === 0 || day === 6
 
@@ -576,15 +671,30 @@ export default function DashboardHub({
               return (
                 <motion.div
                   key={quest.id}
-                  whileHover={{ scale: 1.002 }}
-                  className={`relative overflow-hidden bg-[#02050c]/95 border rounded-lg p-4 sm:p-5 transition-all flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 ${
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  transition={{ type: 'spring', stiffness: 600, damping: 25 }}
+                  className={`relative overflow-hidden bg-[#02050c]/95 border rounded-lg p-4 sm:p-5 transition-colors duration-150 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 ${
                     isCompleted
-                      ? 'border-slate-900/60 opacity-50'
-                      : 'border-slate-850 hover:border-brand-blue/50'
+                      ? 'border-slate-950 opacity-50'
+                      : isExample
+                        ? 'border-amber-500/20 hover:border-amber-500/60 hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                        : 'border-brand-blue/20 hover:border-brand-blue/60 hover:shadow-[0_0_15px_rgba(0,240,255,0.2)]'
                   }`}
                 >
-                  <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-brand-blue/40" />
-                  <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-brand-blue/40" />
+                  <div className={`absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 ${
+                    isCompleted 
+                      ? 'border-slate-800/30' 
+                      : isExample 
+                        ? 'border-amber-500/40' 
+                        : 'border-brand-blue/40'
+                  }`} />
+                  <div className={`absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 ${
+                    isCompleted 
+                      ? 'border-slate-800/30' 
+                      : isExample 
+                        ? 'border-amber-500/40' 
+                        : 'border-brand-blue/40'
+                  }`} />
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -621,7 +731,14 @@ export default function DashboardHub({
                       <CheckCircle className="text-brand-blue fill-brand-blue/5 shrink-0" size={24} />
                     ) : (
                       <button
-                        onClick={() => openQuestModal(quest, isExample ? 'example' : 'system', true)}
+                        onClick={() => {
+                          if (isExample) {
+                            setPendingExampleQuest(quest as ExampleQuest)
+                            setShowExampleWarning(true)
+                          } else {
+                            openQuestModal(quest, 'system', true)
+                          }
+                        }}
                         disabled={loadingQuestId === quest.id}
                         className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-blue/10 hover:bg-brand-blue/25 text-brand-blue border border-brand-blue/40 hover:border-brand-blue font-extrabold font-mono text-[10px] uppercase rounded transition-all glow-blue disabled:opacity-50 cursor-pointer"
                       >
@@ -662,6 +779,36 @@ export default function DashboardHub({
             </span>
           </div>
 
+          {/* Controls Panel */}
+          {customQuests.length > 0 && (
+            <div className="flex flex-col gap-2 p-2.5 bg-slate-950/40 border border-slate-900 rounded-lg">
+              <div className="flex items-center justify-between text-[8px] text-gray-500 font-bold tracking-widest uppercase px-1">
+                <span>[ DIRECTIVE SORT ]</span>
+                <span>[ CLASS VIEW ]</span>
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={sortBy}
+                  onChange={(e) => handleSortChange(e.target.value as any)}
+                  className="flex-1 px-2 py-1 bg-[#02050c] border border-slate-800 rounded text-[9px] font-bold text-gray-300 focus:outline-none focus:border-brand-purple transition-all uppercase cursor-pointer"
+                >
+                  <option value="created">Created Date</option>
+                  <option value="status">Quest Status</option>
+                  <option value="priority">Priority (XP)</option>
+                  <option value="category">Stat Category</option>
+                  <option value="title">Alphabetical</option>
+                </select>
+
+                <button
+                  onClick={() => handleViewModeChange(viewMode === 'list' ? 'grouped' : 'list')}
+                  className="px-2.5 py-1 bg-slate-900 border border-slate-800 hover:border-brand-purple/40 hover:text-brand-purple rounded text-[9px] font-bold text-gray-300 transition-all uppercase cursor-pointer"
+                >
+                  View: {viewMode === 'list' ? 'List' : 'Group'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {customQuests.length === 0 ? (
             <div className="bg-[#02050c]/90 border border-slate-900 rounded-lg p-8 text-center text-gray-500">
               <p className="text-xs uppercase mb-2">No active custom trials.</p>
@@ -674,61 +821,117 @@ export default function DashboardHub({
             </div>
           ) : (
             <div className="space-y-4">
-              {customQuests.slice(0, 5).map((quest) => (
-                <div 
-                  key={quest.id}
-                  className="bg-[#02050c]/95 border border-slate-850 p-4 rounded-lg space-y-3 hover:border-brand-purple/40 transition-all relative"
-                >
-                  <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-brand-purple/30" />
-                  <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-brand-purple/30" />
-
-                  <div>
-                    <div className="flex justify-between items-start gap-2">
-                      <h4 className="text-xs font-bold text-white line-clamp-1">{quest.title}</h4>
-                      <span className="px-1.5 rounded bg-brand-purple/10 text-[8px] text-brand-purple font-bold uppercase">
-                        {quest.repeat_type}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-gray-400 line-clamp-2 mt-1 leading-relaxed">{quest.description}</p>
-                  </div>
-
-                  <div className="flex justify-between items-center pt-2 border-t border-slate-950">
-                    <span className="text-[10px] text-brand-blue font-bold">
-                      +{quest.xp_reward} XP
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => openQuestModal(quest, 'custom', false)}
-                        className="px-2 py-1 bg-slate-900 hover:bg-slate-850 text-gray-400 hover:text-white border border-slate-800 hover:border-slate-700 font-extrabold text-[9px] uppercase rounded transition-all cursor-pointer"
-                      >
-                        Details
-                      </button>
-                      {quest.next_reset_at && new Date(quest.next_reset_at) > new Date() ? (
-                        <CheckCircle className="text-brand-purple fill-brand-purple/5 shrink-0" size={20} />
-                      ) : (
-                        <button
-                          onClick={() => openQuestModal(quest, 'custom', true)}
-                          disabled={loadingQuestId === quest.id}
-                          className="px-2.5 py-1 bg-brand-purple/10 hover:bg-brand-purple/25 text-brand-purple border border-brand-purple/40 hover:border-brand-purple font-extrabold text-[9px] uppercase rounded transition-all glow-purple disabled:opacity-50 cursor-pointer"
-                        >
-                          {loadingQuestId === quest.id ? (
-                            <span className="h-3 w-3 animate-spin rounded-full border border-brand-purple border-t-transparent" />
-                          ) : (
-                            'Complete'
-                          )}
-                        </button>
-                      )}
-                    </div>
-                  </div>
+              {viewMode === 'grouped' ? (
+                <div className="space-y-4">
+                  {(Object.keys(groupedCustomQuests) as StatCategory[]).map((category) => {
+                    const list = groupedCustomQuests[category]
+                    if (!list || list.length === 0) return null
+                    return (
+                      <div key={category} className="space-y-1.5">
+                        <div className="text-[9px] font-black tracking-widest text-brand-purple/80 uppercase px-1 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-brand-purple/60" />
+                          {category.replace('_', ' ')} Directives
+                        </div>
+                        <div className="space-y-1.5">
+                          {list.map((quest) => {
+                            const isCompleted = isQuestCompleted(quest, 'custom')
+                            return (
+                              <motion.div
+                                key={quest.id}
+                                onClick={() => openQuestModal(quest, 'custom', false)}
+                                whileHover={{ scale: 1.02, y: -2 }}
+                                transition={{ type: 'spring', stiffness: 600, damping: 25 }}
+                                className={`flex items-center justify-between p-2.5 rounded border transition-colors duration-150 cursor-pointer select-none gap-3 ${
+                                  isCompleted 
+                                    ? 'bg-slate-950/40 border-slate-900/20 opacity-60 hover:opacity-100 hover:border-brand-purple/30 hover:shadow-[0_0_12px_rgba(139,92,246,0.1)]' 
+                                    : 'bg-[#02050c]/90 border-brand-purple/20 hover:border-brand-purple/60 hover:shadow-[0_0_12px_rgba(139,92,246,0.25)]'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  {isCompleted ? (
+                                    <CheckCircle size={14} className="text-brand-purple shrink-0 fill-brand-purple/5" />
+                                  ) : (
+                                    <div className="w-3.5 h-3.5 rounded-full border border-brand-purple/40 flex items-center justify-center shrink-0">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-brand-purple/30 animate-pulse" />
+                                    </div>
+                                  )}
+                                  <span className={`text-[11px] font-bold truncate ${isCompleted ? 'line-through text-gray-500' : 'text-gray-250'}`}>
+                                    {quest.title}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${statColor[quest.stat_category]}`}>
+                                    {quest.stat_category.replace('_', ' ')}
+                                  </span>
+                                  <span className="px-1.5 py-0.5 rounded bg-brand-blue/10 border border-brand-blue/20 text-[8px] text-brand-blue font-bold">
+                                    +{quest.xp_reward} XP
+                                  </span>
+                                  <span className="px-1.5 py-0.5 rounded bg-brand-purple/10 border border-brand-purple/20 text-[8px] text-brand-purple font-bold uppercase">
+                                    {quest.repeat_type}
+                                  </span>
+                                </div>
+                              </motion.div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-              ))}
+              ) : (
+                <div className="space-y-1.5">
+                  {displayedCustomQuests.map((quest) => {
+                    const isCompleted = isQuestCompleted(quest, 'custom')
+                    return (
+                      <motion.div
+                        key={quest.id}
+                        onClick={() => openQuestModal(quest, 'custom', false)}
+                        whileHover={{ scale: 1.02, y: -2 }}
+                        transition={{ type: 'spring', stiffness: 600, damping: 25 }}
+                        className={`flex items-center justify-between p-2.5 rounded border transition-colors duration-150 cursor-pointer select-none gap-3 ${
+                          isCompleted 
+                            ? 'bg-slate-950/40 border-slate-900/20 opacity-60 hover:opacity-100 hover:border-brand-purple/30 hover:shadow-[0_0_12px_rgba(139,92,246,0.1)]' 
+                            : 'bg-[#02050c]/90 border-brand-purple/20 hover:border-brand-purple/60 hover:shadow-[0_0_12px_rgba(139,92,246,0.25)]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {isCompleted ? (
+                            <CheckCircle size={14} className="text-brand-purple shrink-0 fill-brand-purple/5" />
+                          ) : (
+                            <div className="w-3.5 h-3.5 rounded-full border border-brand-purple/40 flex items-center justify-center shrink-0">
+                              <div className="w-1.5 h-1.5 rounded-full bg-brand-purple/30 animate-pulse" />
+                            </div>
+                          )}
+                          <span className={`text-[11px] font-bold truncate ${isCompleted ? 'line-through text-gray-500' : 'text-gray-250'}`}>
+                            {quest.title}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${statColor[quest.stat_category]}`}>
+                            {quest.stat_category.replace('_', ' ')}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-brand-blue/10 border border-brand-blue/20 text-[8px] text-brand-blue font-bold">
+                            +{quest.xp_reward} XP
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-brand-purple/10 border border-brand-purple/20 text-[8px] text-brand-purple font-bold uppercase">
+                            {quest.repeat_type}
+                          </span>
+                        </div>
+                      </motion.div>
+                    )
+                  })}
+                </div>
+              )}
 
+              {/* View More inline expand button */}
               {customQuests.length > 5 && (
                 <button
-                  onClick={() => router.push('/my-quests')}
-                  className="w-full py-2 bg-slate-900/50 hover:bg-slate-900 border border-slate-900 hover:border-slate-850 text-center text-[10px] text-gray-400 uppercase rounded transition-all cursor-pointer"
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="w-full py-2 bg-slate-900/50 hover:bg-slate-900 border border-slate-900 hover:border-slate-850 text-center text-[10px] text-gray-400 uppercase rounded tracking-wider transition-all cursor-pointer font-bold"
                 >
-                  View All Custom Coordinates (+{customQuests.length - 5} more)
+                  {isExpanded 
+                    ? '[ COLLAPSE COMPACT DECK ]' 
+                    : `[ VIEW ALL ACTIVE DIRECTIVES (+${customQuests.length - 5} MORE) ]`}
                 </button>
               )}
             </div>
@@ -1069,6 +1272,83 @@ export default function DashboardHub({
                   className="w-full mt-4 py-2.5 bg-brand-gold hover:bg-yellow-400 text-black font-black text-xs uppercase tracking-widest glow-gold transition-all cursor-pointer"
                 >
                   [ ENTER THE SYSTEM ]
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Example Quest Warning Modal */}
+      <AnimatePresence>
+        {showExampleWarning && pendingExampleQuest && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => { if (!modalLoading) { setShowExampleWarning(false); setPendingExampleQuest(null); } }}
+              className="absolute inset-0 bg-black/90 backdrop-blur-md"
+            />
+            {/* Modal Box */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative p-6 border-2 border-amber-500 rounded-lg bg-[#02050c]/98 max-w-sm w-full text-center shadow-[0_0_30px_rgba(245,158,11,0.25)] font-mono text-gray-200 z-10"
+            >
+              {/* RPG corners */}
+              {['top-0 left-0 border-t-4 border-l-4', 'top-0 right-0 border-t-4 border-r-4', 'bottom-0 left-0 border-b-4 border-l-4', 'bottom-0 right-0 border-b-4 border-r-4'].map((cls, i) => (
+                <div key={i} className={`absolute w-4 h-4 ${cls} border-amber-500`} />
+              ))}
+              <div className="flex justify-center mb-3 text-amber-500 animate-pulse">
+                <Info size={32} />
+              </div>
+              <h3 className="text-xs font-black tracking-widest text-amber-500 uppercase mb-2">
+                [ SYSTEM PROTOCOL ADVISORY ]
+              </h3>
+              <p className="text-xs text-gray-300 uppercase tracking-wide leading-relaxed mb-6 font-semibold">
+                "Custom quests are preferred to become the actual player. Create quests based on your daily needs and real-life goals."
+              </p>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={async () => {
+                    const eq = pendingExampleQuest
+                    setShowExampleWarning(false)
+                    setPendingExampleQuest(null)
+                    await performClaimExampleQuest(eq)
+                  }}
+                  disabled={modalLoading}
+                  className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-black text-[10px] uppercase tracking-widest rounded transition-all glow-amber cursor-pointer flex items-center justify-center"
+                >
+                  {modalLoading ? (
+                    <span className="h-3 w-3 animate-spin rounded-full border border-black border-t-transparent" />
+                  ) : (
+                    '[ CONTINUE TO CLAIM ]'
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowExampleWarning(false)
+                    setPendingExampleQuest(null)
+                    setSelectedQuest(null)
+                    router.push('/my-quests')
+                  }}
+                  disabled={modalLoading}
+                  className="w-full py-2.5 bg-brand-purple hover:bg-violet-600 text-white font-black text-[10px] uppercase tracking-widest rounded transition-all glow-purple cursor-pointer"
+                >
+                  [ CREATE CUSTOM QUESTS ]
+                </button>
+                <button
+                  onClick={() => {
+                    setShowExampleWarning(false)
+                    setPendingExampleQuest(null)
+                  }}
+                  disabled={modalLoading}
+                  className="w-full py-2.5 border border-slate-800 hover:border-slate-700 bg-slate-900/50 hover:bg-slate-900 text-gray-400 hover:text-white font-extrabold text-[10px] uppercase rounded transition-all cursor-pointer"
+                >
+                  [ ABORT ]
                 </button>
               </div>
             </motion.div>
