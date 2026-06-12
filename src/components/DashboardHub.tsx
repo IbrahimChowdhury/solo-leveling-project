@@ -375,8 +375,52 @@ export default function DashboardHub({
     return sorted
   }
 
+  const getSortedDailyQuests = (quests: (DailyQuest | ExampleQuest)[]) => {
+    const sorted = [...quests]
+    sorted.sort((a, b) => {
+      if (sortBy === 'status') {
+        const aComp = 'isExample' in a ? claimedExampleIds.has(a.id) : a.completed
+        const bComp = 'isExample' in b ? claimedExampleIds.has(b.id) : b.completed
+        if (aComp === bComp) {
+          const aTime = 'created_at' in a ? new Date(a.created_at).getTime() : 0
+          const bTime = 'created_at' in b ? new Date(b.created_at).getTime() : 0
+          return bTime - aTime
+        }
+        return aComp ? 1 : -1
+      }
+      if (sortBy === 'priority') {
+        const aXP = a.xp_reward
+        const bXP = b.xp_reward
+        if (aXP === bXP) {
+          const aTime = 'created_at' in a ? new Date(a.created_at).getTime() : 0
+          const bTime = 'created_at' in b ? new Date(b.created_at).getTime() : 0
+          return bTime - aTime
+        }
+        return bXP - aXP
+      }
+      if (sortBy === 'category') {
+        if (a.stat_category === b.stat_category) {
+          const aTime = 'created_at' in a ? new Date(a.created_at).getTime() : 0
+          const bTime = 'created_at' in b ? new Date(b.created_at).getTime() : 0
+          return bTime - aTime
+        }
+        return a.stat_category.localeCompare(b.stat_category)
+      }
+      if (sortBy === 'title') {
+        return a.title.localeCompare(b.title)
+      }
+      // 'created' (newest first)
+      const aTime = 'created_at' in a ? new Date(a.created_at).getTime() : 0
+      const bTime = 'created_at' in b ? new Date(b.created_at).getTime() : 0
+      return bTime - aTime
+    })
+    return sorted
+  }
+
   const sortedCustomQuests = getSortedQuests(customQuests)
   const displayedCustomQuests = isExpanded ? sortedCustomQuests : sortedCustomQuests.slice(0, 5)
+
+  const sortedDailyQuests = getSortedDailyQuests(isUsingExamples ? EXAMPLE_DAILY_QUESTS : dailyQuests)
 
   // Group by category if grouped view is enabled
   const groupedCustomQuests: Record<StatCategory, CustomQuest[]> = {} as any
@@ -387,6 +431,17 @@ export default function DashboardHub({
         groupedCustomQuests[cat] = []
       }
       groupedCustomQuests[cat].push(quest)
+    })
+  }
+
+  const groupedDailyQuests: Record<StatCategory, (DailyQuest | ExampleQuest)[]> = {} as any
+  if (viewMode === 'grouped') {
+    sortedDailyQuests.forEach(quest => {
+      const cat = quest.stat_category as StatCategory
+      if (!groupedDailyQuests[cat]) {
+        groupedDailyQuests[cat] = []
+      }
+      groupedDailyQuests[cat].push(quest)
     })
   }
   const day = new Date().getUTCDay()
@@ -409,6 +464,98 @@ export default function DashboardHub({
     stamina: 'text-amber-400 border-amber-500/30 bg-amber-500/10',
     exercise: 'text-orange-400 border-orange-500/30 bg-orange-500/10',
     skills: 'text-purple-400 border-purple-500/30 bg-purple-500/10',
+  }
+
+  const renderDailyQuestCard = (quest: DailyQuest | ExampleQuest) => {
+    const isExample = 'isExample' in quest
+    const isCompleted = isExample
+      ? claimedExampleIds.has(quest.id)
+      : (quest as DailyQuest).completed
+
+    return (
+      <motion.div
+        key={quest.id}
+        whileHover={{ scale: 1.02, y: -2 }}
+        transition={{ type: 'spring', stiffness: 600, damping: 25 }}
+        className={`relative overflow-hidden bg-[#02050c]/95 border rounded-lg p-4 sm:p-5 transition-colors duration-150 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 ${
+          isCompleted
+            ? 'border-slate-950 opacity-50'
+            : isExample
+              ? 'border-amber-500/20 hover:border-amber-500/60 hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+              : 'border-brand-blue/20 hover:border-brand-blue/60 hover:shadow-[0_0_15px_rgba(0,240,255,0.2)]'
+        }`}
+      >
+        <div className={`absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 ${
+          isCompleted 
+            ? 'border-slate-800/30' 
+            : isExample 
+              ? 'border-amber-500/40' 
+              : 'border-brand-blue/40'
+        }`} />
+        <div className={`absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 ${
+          isCompleted 
+            ? 'border-slate-800/30' 
+            : isExample 
+              ? 'border-amber-500/40' 
+              : 'border-brand-blue/40'
+        }`} />
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <span className={`px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wider ${statColor[quest.stat_category as StatCategory]}`}>
+              {quest.stat_category.replace('_', ' ')}
+            </span>
+            <span className="px-2 py-0.5 rounded bg-brand-blue/10 border border-brand-blue/20 text-[9px] text-brand-blue font-bold">
+              +{quest.xp_reward} XP
+            </span>
+            {isExample && (
+              <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-[9px] text-amber-400 font-bold uppercase">
+                EXAMPLE
+              </span>
+            )}
+          </div>
+          <h3 className={`text-sm font-bold tracking-wide ${isCompleted ? 'line-through text-gray-600' : 'text-white'}`}>
+            {quest.title}
+          </h3>
+          <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
+            {quest.description}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-end mt-2 sm:mt-0 pt-3 border-t border-slate-900/60 sm:border-t-0 sm:pt-0 shrink-0">
+          <button
+            onClick={() => openQuestModal(quest, isExample ? 'example' : 'system', false)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-gray-455 hover:text-white border border-slate-900 hover:border-slate-800 font-extrabold font-mono text-[10px] uppercase rounded transition-all cursor-pointer"
+          >
+            <Info size={12} />
+            Details
+          </button>
+
+          {isCompleted ? (
+            <CheckCircle className="text-brand-blue fill-brand-blue/5 shrink-0" size={24} />
+          ) : (
+            <button
+              onClick={() => {
+                if (isExample) {
+                  setPendingExampleQuest(quest as ExampleQuest)
+                  setShowExampleWarning(true)
+                } else {
+                  openQuestModal(quest, 'system', true)
+                }
+              }}
+              disabled={loadingQuestId === quest.id}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-blue/10 hover:bg-brand-blue/25 text-brand-blue border border-brand-blue/40 hover:border-brand-blue font-extrabold font-mono text-[10px] uppercase rounded transition-all glow-blue disabled:opacity-50 cursor-pointer"
+            >
+              {loadingQuestId === quest.id ? (
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border border-brand-blue border-t-transparent" />
+              ) : (
+                'Clear'
+              )}
+            </button>
+          )}
+        </div>
+      </motion.div>
+    )
   }
 
   return (
@@ -660,99 +807,61 @@ export default function DashboardHub({
             </motion.div>
           )}
 
+          {/* Controls Panel (Cyan Theme for Daily Directives) */}
+          {(dailyQuests.length > 0 || isUsingExamples) && (
+            <div className="flex flex-col gap-2 p-2.5 bg-slate-950/40 border border-slate-900 rounded-lg">
+              <div className="flex items-center justify-between text-[8px] text-gray-500 font-bold tracking-widest uppercase px-1">
+                <span>[ DIRECTIVE SORT ]</span>
+                <span>[ CLASS VIEW ]</span>
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={sortBy}
+                  onChange={(e) => handleSortChange(e.target.value as any)}
+                  className="flex-1 px-2 py-1 bg-[#02050c] border border-slate-800 rounded text-[9px] font-bold text-gray-300 focus:outline-none focus:border-brand-blue transition-all uppercase cursor-pointer"
+                >
+                  <option value="created">Created Date</option>
+                  <option value="status">Quest Status</option>
+                  <option value="priority">Priority (XP)</option>
+                  <option value="category">Stat Category</option>
+                  <option value="title">Alphabetical</option>
+                </select>
+
+                <button
+                  onClick={() => handleViewModeChange(viewMode === 'list' ? 'grouped' : 'list')}
+                  className="px-2.5 py-1 bg-slate-900 border border-slate-800 hover:border-brand-blue/40 hover:text-brand-blue rounded text-[9px] font-bold text-gray-300 transition-all uppercase cursor-pointer"
+                >
+                  View: {viewMode === 'list' ? 'List' : 'Group'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Quest Cards */}
           <div className="space-y-4">
-            {(isUsingExamples ? EXAMPLE_DAILY_QUESTS : dailyQuests).map((quest) => {
-              const isExample = 'isExample' in quest
-              const isCompleted = isExample
-                ? claimedExampleIds.has(quest.id)
-                : (quest as DailyQuest).completed
-
-              return (
-                <motion.div
-                  key={quest.id}
-                  whileHover={{ scale: 1.02, y: -2 }}
-                  transition={{ type: 'spring', stiffness: 600, damping: 25 }}
-                  className={`relative overflow-hidden bg-[#02050c]/95 border rounded-lg p-4 sm:p-5 transition-colors duration-150 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 ${
-                    isCompleted
-                      ? 'border-slate-950 opacity-50'
-                      : isExample
-                        ? 'border-amber-500/20 hover:border-amber-500/60 hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]'
-                        : 'border-brand-blue/20 hover:border-brand-blue/60 hover:shadow-[0_0_15px_rgba(0,240,255,0.2)]'
-                  }`}
-                >
-                  <div className={`absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 ${
-                    isCompleted 
-                      ? 'border-slate-800/30' 
-                      : isExample 
-                        ? 'border-amber-500/40' 
-                        : 'border-brand-blue/40'
-                  }`} />
-                  <div className={`absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 ${
-                    isCompleted 
-                      ? 'border-slate-800/30' 
-                      : isExample 
-                        ? 'border-amber-500/40' 
-                        : 'border-brand-blue/40'
-                  }`} />
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <span className={`px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wider ${statColor[quest.stat_category as StatCategory]}`}>
-                        {quest.stat_category.replace('_', ' ')}
-                      </span>
-                      <span className="px-2 py-0.5 rounded bg-brand-blue/10 border border-brand-blue/20 text-[9px] text-brand-blue font-bold">
-                        +{quest.xp_reward} XP
-                      </span>
-                      {isExample && (
-                        <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-[9px] text-amber-400 font-bold uppercase">
-                          EXAMPLE
-                        </span>
-                      )}
+            {viewMode === 'grouped' ? (
+              <div className="space-y-4">
+                {(Object.keys(groupedDailyQuests) as StatCategory[]).map((category) => {
+                  const list = groupedDailyQuests[category]
+                  if (!list || list.length === 0) return null
+                  return (
+                    <div key={category} className="space-y-1.5">
+                      <div className="text-[10px] font-black tracking-widest text-brand-blue/80 uppercase px-1 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-brand-blue/60" />
+                        {category.replace('_', ' ')} Directives
+                      </div>
+                      <div className="space-y-3">
+                        {list.map((quest) => renderDailyQuestCard(quest))}
+                      </div>
                     </div>
-                    <h3 className={`text-sm font-bold tracking-wide ${isCompleted ? 'line-through text-gray-600' : 'text-white'}`}>
-                      {quest.title}
-                    </h3>
-                    <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
-                      {quest.description}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-3 w-full sm:w-auto justify-end mt-2 sm:mt-0 pt-3 border-t border-slate-900/60 sm:border-t-0 sm:pt-0 shrink-0">
-                    <button
-                      onClick={() => openQuestModal(quest, isExample ? 'example' : 'system', false)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-gray-455 hover:text-white border border-slate-900 hover:border-slate-800 font-extrabold font-mono text-[10px] uppercase rounded transition-all cursor-pointer"
-                    >
-                      <Info size={12} />
-                      Details
-                    </button>
-
-                    {isCompleted ? (
-                      <CheckCircle className="text-brand-blue fill-brand-blue/5 shrink-0" size={24} />
-                    ) : (
-                      <button
-                        onClick={() => {
-                          if (isExample) {
-                            setPendingExampleQuest(quest as ExampleQuest)
-                            setShowExampleWarning(true)
-                          } else {
-                            openQuestModal(quest, 'system', true)
-                          }
-                        }}
-                        disabled={loadingQuestId === quest.id}
-                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-blue/10 hover:bg-brand-blue/25 text-brand-blue border border-brand-blue/40 hover:border-brand-blue font-extrabold font-mono text-[10px] uppercase rounded transition-all glow-blue disabled:opacity-50 cursor-pointer"
-                      >
-                        {loadingQuestId === quest.id ? (
-                          <span className="h-3.5 w-3.5 animate-spin rounded-full border border-brand-blue border-t-transparent" />
-                        ) : (
-                          'Clear'
-                        )}
-                      </button>
-                    )}
-                  </div>
-                </motion.div>
-              )
-            })}
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {sortedDailyQuests.map((quest) => renderDailyQuestCard(quest))}
+              </div>
+            )}
 
             {/* Warning Block */}
             <div className="bg-brand-red/5 border border-brand-red/20 rounded-lg p-4 flex items-start gap-3 relative overflow-hidden">

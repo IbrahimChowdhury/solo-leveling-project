@@ -111,6 +111,24 @@ export async function completeDailyQuest(questId: string, proofImageUrl: string 
     })
     .eq('id', questId)
 
+  // Synchronize with parent custom quest if it's a daily custom quest template
+  const lastCompletedAt = new Date().toISOString()
+  const nextDate = new Date()
+  nextDate.setUTCDate(nextDate.getUTCDate() + 1)
+  nextDate.setUTCHours(0, 0, 0, 0)
+  const nextResetAt = nextDate.toISOString()
+
+  await supabase
+    .from('custom_quests')
+    .update({
+      last_completed_at: lastCompletedAt,
+      next_reset_at: nextResetAt,
+    })
+    .eq('user_id', user.id)
+    .eq('title', quest.title)
+    .eq('repeat_type', 'daily')
+    .eq('active', true)
+
   // Log completion
   await supabase.from('quest_completions').insert({
     user_id: user.id,
@@ -250,6 +268,21 @@ export async function completeCustomQuest(questId: string, proofImageUrl: string
       active: quest.repeat_type !== 'one-time', // set inactive if one-time
     })
     .eq('id', questId)
+
+  // Synchronize with today's copy in daily_quests if it's a daily custom quest
+  if (quest.repeat_type === 'daily') {
+    const today = new Date().toISOString().split('T')[0]
+    await supabase
+      .from('daily_quests')
+      .update({
+        completed: true,
+        completed_at: new Date().toISOString(),
+      })
+      .eq('user_id', user.id)
+      .eq('date', today)
+      .eq('title', quest.title)
+      .eq('completed', false)
+  }
 
   // Log completion
   await supabase.from('quest_completions').insert({
