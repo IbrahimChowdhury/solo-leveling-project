@@ -22,7 +22,7 @@ import CelebrationOverlays from '@/components/CelebrationOverlays'
 
 // Type definitions
 type WorkoutType = 'home' | 'gym' | 'calisthenics' | 'band'
-type BodyPart = 'chest' | 'back' | 'core' | 'legs' | 'shoulders' | 'arms'
+type BodyPart = 'neck' | 'chest' | 'back' | 'shoulders' | 'biceps' | 'triceps' | 'forearms' | 'core' | 'thighs' | 'calves'
 
 interface Exercise {
   name: string
@@ -52,65 +52,106 @@ interface Connection {
   color?: string
 }
 
-// 3D model vertices for the holographic human figure
+// 3D model vertices for the holographic human figure (10 nodes)
 const SKELETON_POINTS: Point3D[] = [
   { x: 0, y: 1.6, z: 0, name: 'Head' }, // 0
-  { x: 0, y: 1.35, z: 0, name: 'Neck' }, // 1
-  { x: 0, y: 1.05, z: 0, name: 'Spine_Chest', group: 'chest' }, // 2 (chest front / back)
-  { x: 0, y: 0.7, z: 0, name: 'Spine_Core', group: 'core' }, // 3 (core front)
-  { x: 0, y: 0.4, z: 0, name: 'Pelvis' }, // 4
+  { x: 0, y: 1.45, z: 0, name: 'Neck', group: 'neck' }, // 1 (Neck/Ghar)
+  { x: 0, y: 1.1, z: 0.05, name: 'Chest', group: 'chest' }, // 2 (Chest front)
+  { x: 0, y: 1.1, z: -0.05, name: 'Back', group: 'back' }, // 3 (Back/Lats back)
+  { x: 0, y: 0.75, z: 0.04, name: 'Abs', group: 'core' }, // 4 (Core front)
+  { x: 0, y: 0.4, z: 0, name: 'Pelvis' }, // 5
   
-  // Left Arm
-  { x: -0.38, y: 1.3, z: 0, name: 'L_Shoulder', group: 'shoulders' }, // 5
-  { x: -0.58, y: 0.9, z: 0, name: 'L_Elbow', group: 'arms' }, // 6
-  { x: -0.72, y: 0.5, z: 0, name: 'L_Wrist', group: 'arms' }, // 7
+  // Left Shoulder & Arm
+  { x: -0.38, y: 1.3, z: 0, name: 'L_Shoulder', group: 'shoulders' }, // 6
+  { x: -0.48, y: 1.05, z: 0.06, name: 'L_Bicep', group: 'biceps' }, // 7
+  { x: -0.48, y: 1.05, z: -0.06, name: 'L_Tricep', group: 'triceps' }, // 8
+  { x: -0.58, y: 0.85, z: 0, name: 'L_Elbow' }, // 9
+  { x: -0.65, y: 0.65, z: 0, name: 'L_Forearm', group: 'forearms' }, // 10
+  { x: -0.72, y: 0.5, z: 0, name: 'L_Wrist' }, // 11
   
-  // Right Arm
-  { x: 0.38, y: 1.3, z: 0, name: 'R_Shoulder', group: 'shoulders' }, // 8
-  { x: 0.58, y: 0.9, z: 0, name: 'R_Elbow', group: 'arms' }, // 9
-  { x: 0.72, y: 0.5, z: 0, name: 'R_Wrist', group: 'arms' }, // 10
+  // Right Shoulder & Arm
+  { x: 0.38, y: 1.3, z: 0, name: 'R_Shoulder', group: 'shoulders' }, // 12
+  { x: 0.48, y: 1.05, z: 0.06, name: 'R_Bicep', group: 'biceps' }, // 13
+  { x: 0.48, y: 1.05, z: -0.06, name: 'R_Tricep', group: 'triceps' }, // 14
+  { x: 0.58, y: 0.85, z: 0, name: 'R_Elbow' }, // 15
+  { x: 0.65, y: 0.65, z: 0, name: 'R_Forearm', group: 'forearms' }, // 16
+  { x: 0.72, y: 0.5, z: 0, name: 'R_Wrist' }, // 17
 
   // Left Leg
-  { x: -0.18, y: 0.4, z: 0, name: 'L_Hip', group: 'legs' }, // 11
-  { x: -0.22, y: -0.15, z: 0, name: 'L_Knee', group: 'legs' }, // 12
-  { x: -0.24, y: -0.75, z: 0, name: 'L_Ankle', group: 'legs' }, // 13
+  { x: -0.18, y: 0.4, z: 0, name: 'L_Hip' }, // 18
+  { x: -0.20, y: 0.1, z: 0.04, name: 'L_Thigh', group: 'thighs' }, // 19
+  { x: -0.22, y: -0.15, z: 0, name: 'L_Knee' }, // 20
+  { x: -0.23, y: -0.45, z: -0.04, name: 'L_Calf', group: 'calves' }, // 21
+  { x: -0.24, y: -0.75, z: 0, name: 'L_Ankle' }, // 22
 
   // Right Leg
-  { x: 0.18, y: 0.4, z: 0, name: 'R_Hip', group: 'legs' }, // 14
-  { x: 0.22, y: -0.15, z: 0, name: 'R_Knee', group: 'legs' }, // 15
-  { x: 0.24, y: -0.75, z: 0, name: 'R_Ankle', group: 'legs' }  // 16
+  { x: 0.18, y: 0.4, z: 0, name: 'R_Hip' }, // 23
+  { x: 0.20, y: 0.1, z: 0.04, name: 'R_Thigh', group: 'thighs' }, // 24
+  { x: 0.22, y: -0.15, z: 0, name: 'R_Knee' }, // 25
+  { x: 0.23, y: -0.45, z: -0.04, name: 'R_Calf', group: 'calves' }, // 26
+  { x: 0.24, y: -0.75, z: 0, name: 'R_Ankle' }  // 27
 ]
 
 const SKELETON_CONNECTIONS: Connection[] = [
   { from: 0, to: 1 }, // Head to Neck
-  { from: 1, to: 2 }, // Neck to Spine Chest
-  { from: 2, to: 3 }, // Chest to Core
-  { from: 3, to: 4 }, // Core to Pelvis
+  { from: 1, to: 2 }, // Neck to Chest
+  { from: 1, to: 3 }, // Neck to Back
+  { from: 2, to: 4 }, // Chest to Abs
+  { from: 3, to: 4 }, // Back to Abs
+  { from: 4, to: 5 }, // Abs to Pelvis
   
   // Left Arm
-  { from: 1, to: 5 }, // Neck to L Shoulder
-  { from: 5, to: 6 }, // Shoulder to Elbow
-  { from: 6, to: 7 }, // Elbow to Wrist
+  { from: 1, to: 6 }, // Neck to L Shoulder
+  { from: 6, to: 7 }, // Shoulder to L Bicep
+  { from: 6, to: 8 }, // Shoulder to L Tricep
+  { from: 7, to: 9 }, // Bicep to Elbow
+  { from: 8, to: 9 }, // Tricep to Elbow
+  { from: 9, to: 10 }, // Elbow to Forearm
+  { from: 10, to: 11 }, // Forearm to Wrist
   
   // Right Arm
-  { from: 1, to: 8 }, // Neck to R Shoulder
-  { from: 8, to: 9 }, // Shoulder to Elbow
-  { from: 9, to: 10 }, // Elbow to Wrist
+  { from: 1, to: 12 }, // Neck to R Shoulder
+  { from: 12, to: 13 }, // Shoulder to R Bicep
+  { from: 12, to: 14 }, // Shoulder to R Tricep
+  { from: 13, to: 15 }, // Bicep to Elbow
+  { from: 14, to: 15 }, // Tricep to Elbow
+  { from: 15, to: 16 }, // Elbow to Forearm
+  { from: 16, to: 17 }, // Forearm to Wrist
 
   // Left Leg
-  { from: 4, to: 11 }, // Pelvis to L Hip
-  { from: 11, to: 12 }, // Hip to Knee
-  { from: 12, to: 13 }, // Knee to Ankle
+  { from: 5, to: 18 }, // Pelvis to L Hip
+  { from: 18, to: 19 }, // Hip to Thigh
+  { from: 19, to: 20 }, // Thigh to Knee
+  { from: 20, to: 21 }, // Knee to Calf
+  { from: 21, to: 22 }, // Calf to Ankle
 
   // Right Leg
-  { from: 4, to: 14 }, // Pelvis to R Hip
-  { from: 14, to: 15 }, // Hip to Knee
-  { from: 15, to: 16 }  // Knee to Ankle
+  { from: 5, to: 23 }, // Pelvis to R Hip
+  { from: 23, to: 24 }, // Hip to Thigh
+  { from: 24, to: 25 }, // Thigh to Knee
+  { from: 25, to: 26 }, // Knee to Calf
+  { from: 26, to: 27 }  // Calf to Ankle
 ]
 
 // The workout dataset mapped by type and body parts
 const EXERCISES_DATA: Record<WorkoutType, Record<BodyPart, Exercise[]>> = {
   calisthenics: {
+    neck: [
+      {
+        name: "Neck Flexion Curls",
+        description: "Strengthen front neck muscles using head weight.",
+        sets: 3,
+        reps: "15 - 20 reps",
+        instructions: ["Lie flat on back on a floor/bench, head hanging off edge.", "Slowly lower head backward.", "Tuck chin and lift head forward, squeezing neck muscles."]
+      },
+      {
+        name: "Neck Extension Raises",
+        description: "Build posterior neck and upper traps posture.",
+        sets: 3,
+        reps: "15 - 20 reps",
+        instructions: ["Lie face down on stomach, head hanging off edge.", "Lower head down slowly.", "Raise head upward, looking at the ceiling, squeeze posterior neck."]
+      }
+    ],
     chest: [
       {
         name: "Standard Push-ups",
@@ -150,11 +191,75 @@ const EXERCISES_DATA: Record<WorkoutType, Record<BodyPart, Exercise[]>> = {
         instructions: ["Grip the bar with palms facing towards you.", "Pull chest to the bar, squeeze shoulder blades.", "Lower down slowly."]
       },
       {
-        name: "Inverted Rows (Australian Pull-ups)",
+        name: "Inverted Rows",
         description: "Excellent horizontal pulling movement.",
         sets: 3,
         reps: "10 - 15 reps",
         instructions: ["Use a low bar, hang underneath with heels on floor.", "Pull chest to the bar, keeping body straight.", "Slowly lower back down."]
+      }
+    ],
+    shoulders: [
+      {
+        name: "Pike Push-ups",
+        description: "Vertical push mimicking overhead press.",
+        sets: 3,
+        reps: "8 - 12 reps",
+        instructions: ["Form an inverted 'V' shape with hips high.", "Lower head towards hands by bending elbows.", "Push away dynamically."]
+      },
+      {
+        name: "Handstand Hold against Wall",
+        description: "Superb shoulder stability builder.",
+        sets: 3,
+        reps: "30 - 45 seconds",
+        instructions: ["Kick up into a handstand against a wall.", "Keep shoulders active, pushing through the floor.", "Engage core, hold body straight."]
+      }
+    ],
+    biceps: [
+      {
+        name: "Underhand Chin-ups (Bicep Focus)",
+        description: "Vertical pull modified to overload biceps.",
+        sets: 3,
+        reps: "6 - 10 reps",
+        instructions: ["Hang from a bar with narrow underhand grip.", "Pull body up focusing on elbow flexion.", "Lower under slow bicep load."]
+      },
+      {
+        name: "Underhand Inverted Rows",
+        description: "Horizontal pull modified for bicep stimulation.",
+        sets: 3,
+        reps: "10 - 12 reps",
+        instructions: ["Hang underneath a low bar with underhand grip.", "Pull chest up to the bar, engaging biceps.", "Slowly extend arms."]
+      }
+    ],
+    triceps: [
+      {
+        name: "Diamond Push-ups",
+        description: "Targets triceps and inner chest.",
+        sets: 3,
+        reps: "10 - 15 reps",
+        instructions: ["Form a diamond with hands directly under chest.", "Lower chest to hands, keep elbows close to sides.", "Push up explosively."]
+      },
+      {
+        name: "Parallel Bar Dips (Tricep Focus)",
+        description: "Strict vertical dip for posterior arm loading.",
+        sets: 3,
+        reps: "8 - 12 reps",
+        instructions: ["Keep torso perfectly upright on parallel bars.", "Lower straight down, keeping elbows close to body.", "Lock out arms at top."]
+      }
+    ],
+    forearms: [
+      {
+        name: "Dead Hang",
+        description: "Improves grip strength and forearm endurance.",
+        sets: 3,
+        reps: "45 - 60 seconds",
+        instructions: ["Hang freely from a pull-up bar.", "Keep core engaged, do not let shoulders collapse.", "Hold as long as possible under strict forearm load."]
+      },
+      {
+        name: "Active Fingertip Plank",
+        description: "Strengthens finger extensors and flexor compartments.",
+        sets: 3,
+        reps: "30 - 45 seconds",
+        instructions: ["Get into plank stance supported by fingertips, not palms.", "Keep body in straight line.", "Breathe and maintain steady static load."]
       }
     ],
     core: [
@@ -180,7 +285,7 @@ const EXERCISES_DATA: Record<WorkoutType, Record<BodyPart, Exercise[]>> = {
         instructions: ["Lie on back, arms extended overhead.", "Lift head, shoulders, and legs slightly off the floor.", "Ensure lower back is flat against the ground."]
       }
     ],
-    legs: [
+    thighs: [
       {
         name: "Pistol Squats",
         description: "Elite single-leg squat for balance and strength.",
@@ -189,54 +294,40 @@ const EXERCISES_DATA: Record<WorkoutType, Record<BodyPart, Exercise[]>> = {
         instructions: ["Stand on one leg, extend other leg straight out.", "Squat down on standing leg as low as possible.", "Drive back up to standing."]
       },
       {
-        name: "Bodyweight Squats",
-        description: "Fundamental lower body conditioning.",
+        name: "Bulgarian Split Squats",
+        description: "Unilateral thigh overload.",
         sets: 3,
-        reps: "20 - 25 reps",
-        instructions: ["Stand feet shoulder width apart.", "Lower hips back and down like sitting in a chair.", "Keep chest up and return to starting position."]
-      },
-      {
-        name: "Shrimp Squats",
-        description: "Excellent single-leg knee-dominant builder.",
-        sets: 3,
-        reps: "6 - 10 per leg",
-        instructions: ["Stand on one leg, hold the foot of the other leg behind you.", "Lower down until the back knee lightly touches the floor.", "Drive back up using front leg."]
+        reps: "10 - 12 per leg",
+        instructions: ["Place rear foot on elevated ledge behind you.", "Lower hips until front thigh is parallel to floor.", "Push through front heel to return."]
       }
     ],
-    shoulders: [
+    calves: [
       {
-        name: "Pike Push-ups",
-        description: "Vertical push mimicking overhead press.",
+        name: "Single-leg Calf Raises",
+        description: "Isolates calf muscles with body weight.",
         sets: 3,
-        reps: "8 - 12 reps",
-        instructions: ["Form an inverted 'V' shape with hips high.", "Lower head towards hands by bending elbows.", "Push away dynamically."]
+        reps: "15 - 20 per leg",
+        instructions: ["Stand on one leg at the edge of a step.", "Lower heel below step level.", "Push up onto toes as high as possible, hold, then lower."]
       },
       {
-        name: "Handstand Hold against Wall",
-        description: "Superb shoulder stability builder.",
+        name: "Calf Hops",
+        description: "Elastic calf tendon conditioning.",
         sets: 3,
-        reps: "30 - 45 seconds",
-        instructions: ["Kick up into a handstand against a wall.", "Keep shoulders active, pushing through the floor.", "Engage core, hold body straight."]
-      }
-    ],
-    arms: [
-      {
-        name: "Diamond Push-ups",
-        description: "Targets triceps and inner chest.",
-        sets: 3,
-        reps: "10 - 15 reps",
-        instructions: ["Form a diamond with hands directly under chest.", "Lower chest to hands, keep elbows close to sides.", "Push up explosively."]
-      },
-      {
-        name: "Bench Dips",
-        description: "Focused tricep builder using a ledge.",
-        sets: 3,
-        reps: "12 - 15 reps",
-        instructions: ["Hands on bench behind you, legs extended.", "Lower hips by bending elbows to 90 degrees.", "Push back up."]
+        reps: "25 - 30 hops",
+        instructions: ["Bounce vertically using only ankle joints.", "Keep knees soft but do not bend them to jump.", "Land on balls of feet."]
       }
     ]
   },
   home: {
+    neck: [
+      {
+        name: "Towel Isometric Neck Pulls",
+        description: "Neck strengthening utilizing a towel for resistance.",
+        sets: 3,
+        reps: "15 seconds hold",
+        instructions: ["Loop a clean towel behind head, hold ends.", "Pull towel forward while pushing head back, resisting movement.", "Repeat for front and sides."]
+      }
+    ],
     chest: [
       {
         name: "Standard Push-ups",
@@ -269,6 +360,63 @@ const EXERCISES_DATA: Record<WorkoutType, Record<BodyPart, Exercise[]>> = {
         instructions: ["Wrap sturdy towel around door handles.", "Hold ends, lean back, pull chest to door.", "Squeeze shoulder blades."]
       }
     ],
+    shoulders: [
+      {
+        name: "Decline Pike Hold",
+        description: "Static shoulder load training.",
+        sets: 3,
+        reps: "30 - 45 seconds",
+        instructions: ["Elevate feet on chair, keep hips high in pike position.", "Hold weight on shoulders, arms locked."]
+      },
+      {
+        name: "Arm Circles",
+        description: "High rep shoulder burn out.",
+        sets: 3,
+        reps: "50 circles",
+        instructions: ["Extend arms out sideways.", "Make tiny forward circles quickly, keep shoulders loaded."]
+      }
+    ],
+    biceps: [
+      {
+        name: "Water Bottle Curls",
+        description: "Improvised home bicep curl.",
+        sets: 3,
+        reps: "15 - 20 reps",
+        instructions: ["Hold heavy bottles/water jugs in hands.", "Flex elbow under control to curl upward.", "Squeeze at top, lower slowly."]
+      },
+      {
+        name: "Door Frame Bicep Pulls",
+        description: "Isometric bicep pulling.",
+        sets: 3,
+        reps: "12 reps per arm",
+        instructions: ["Stand close to a door frame.", "Grip the frame underhand, lean back.", "Use bicep to pull your chest to the frame."]
+      }
+    ],
+    triceps: [
+      {
+        name: "Chair Dips",
+        description: "Tricep conditioning using furniture.",
+        sets: 3,
+        reps: "12 - 15 reps",
+        instructions: ["Grip edge of sturdy chair seat.", "Extend legs forward, lower hips by bending elbows.", "Drive up using triceps."]
+      },
+      {
+        name: "Overhead Jug Extensions",
+        description: "Overhead tricep extension using water jugs.",
+        sets: 3,
+        reps: "12 - 15 reps",
+        instructions: ["Hold heavy jug with both hands behind head.", "Keep elbows pointing forward.", "Extend arms upward overhead, lower slowly."]
+      }
+    ],
+    forearms: [
+      {
+        name: "Towel Wringing",
+        description: "Excellent grip and forearm workout.",
+        sets: 3,
+        reps: "10 twist reps",
+        instructions: ["Wet a towel (or use dry).", "Grip towel and twist ends in opposite directions.", "Wring with maximum forearm power."]
+      }
+    ],
     core: [
       {
         name: "Bicycle Crunches",
@@ -285,56 +433,42 @@ const EXERCISES_DATA: Record<WorkoutType, Record<BodyPart, Exercise[]>> = {
         instructions: ["Lie flat, hands under glutes.", "Raise legs straight up, then lower slowly without touching floor."]
       }
     ],
-    legs: [
+    thighs: [
       {
-        name: "Air Squats",
-        description: "Bodyweight leg endurance exercise.",
+        name: "Bodyweight Squats",
+        description: "Bodyweight leg conditioning.",
         sets: 3,
-        reps: "20 - 30 reps",
-        instructions: ["Squat low, chest up.", "Return to standing, engage glutes."]
+        reps: "20 - 25 reps",
+        instructions: ["Stand feet shoulder width apart.", "Lower hips back and down.", "Push through heels to return."]
       },
       {
-        name: "Alternating Lunges",
-        description: "Unilateral leg builder.",
+        name: "Walking Lunges",
+        description: "Lower body forward strides.",
         sets: 3,
-        reps: "10 per leg",
-        instructions: ["Step forward, lower back knee to an inch off floor.", "Drive back up, swap legs."]
+        reps: "12 steps per leg",
+        instructions: ["Take a large step forward, lower hips.", "Push off front foot, step forward with other leg."]
       }
     ],
-    shoulders: [
+    calves: [
       {
-        name: "Pike Push-ups",
-        description: "Target shoulders using your body angle.",
+        name: "Floor Calf Raises",
+        description: "Basic calf builder.",
         sets: 3,
-        reps: "8 - 12 reps",
-        instructions: ["V-stance, look at feet.", "Lower head, push back up."]
-      },
-      {
-        name: "Arm Circles",
-        description: "High rep shoulder burn out.",
-        sets: 3,
-        reps: "50 circles",
-        instructions: ["Extend arms out sideways.", "Make tiny forward circles quickly, keep shoulders loaded."]
-      }
-    ],
-    arms: [
-      {
-        name: "Diamond Push-ups",
-        description: "Home tricep targets.",
-        sets: 3,
-        reps: "8 - 12 reps",
-        instructions: ["Diamond hands, push up.", "Keep core engaged."]
-      },
-      {
-        name: "Chair Dips",
-        description: "Tricep conditioning.",
-        sets: 3,
-        reps: "12 - 15 reps",
-        instructions: ["Grip edge of sturdy chair seat.", "Extend legs, lower hips, drive up using triceps."]
+        reps: "25 - 30 reps",
+        instructions: ["Stand feet flat on the floor.", "Rise up onto balls of feet, squeeze calves.", "Lower slowly."]
       }
     ]
   },
   gym: {
+    neck: [
+      {
+        name: "Harness Neck Extensions",
+        description: "Weighted neck posture builder.",
+        sets: 3,
+        reps: "12 - 15 reps",
+        instructions: ["Attach light plate to neck harness.", "Hinge forward slightly, raise head backward against load.", "Keep motion smooth, do not jerk."]
+      }
+    ],
     chest: [
       {
         name: "Barbell Bench Press",
@@ -367,38 +501,6 @@ const EXERCISES_DATA: Record<WorkoutType, Record<BodyPart, Exercise[]>> = {
         instructions: ["Grip bar wide, sit down.", "Pull bar to collarbone, squeeze lats."]
       }
     ],
-    core: [
-      {
-        name: "Cable Crunches",
-        description: "Weighted abdominal load.",
-        sets: 3,
-        reps: "12 - 15 reps",
-        instructions: ["Kneel below high pulley with rope attachment.", "Crunch downwards, bringing elbows to knees."]
-      },
-      {
-        name: "Captain's Chair Leg Raises",
-        description: "Lower ab isolation.",
-        sets: 3,
-        reps: "12 - 15 reps",
-        instructions: ["Rest forearms on pads, suspend body.", "Raise legs straight out to parallel, lower slowly."]
-      }
-    ],
-    legs: [
-      {
-        name: "Barbell Back Squats",
-        description: "Fundamental leg builder.",
-        sets: 3,
-        reps: "8 - 10 reps",
-        instructions: ["Bar across upper back, squat down to parallel.", "Drive up through heels."]
-      },
-      {
-        name: "Leg Press",
-        description: "Quadriceps heavy push.",
-        sets: 3,
-        reps: "10 - 12 reps",
-        instructions: ["Sit in sled, lower plate to 90 degrees knee bend.", "Press plate up, do not lock knees."]
-      }
-    ],
     shoulders: [
       {
         name: "Overhead Barbell Press",
@@ -415,24 +517,106 @@ const EXERCISES_DATA: Record<WorkoutType, Record<BodyPart, Exercise[]>> = {
         instructions: ["Stand with light dumbbells.", "Raise arms to sides parallel to floor, pinky finger higher."]
       }
     ],
-    arms: [
+    biceps: [
       {
         name: "Barbell Bicep Curls",
-        description: "Classic bicep mass builder.",
+        description: "Classic bicep builder.",
         sets: 3,
         reps: "10 - 12 reps",
-        instructions: ["Hold barbell underhand.", "Curl bar up, squeeze biceps, lower with control."]
+        instructions: ["Grip bar shoulder width underhand.", "Curl bar up without rocking torso.", "Lower slowly."]
       },
       {
+        name: "Dumbbell Hammer Curls",
+        description: "Targets biceps and brachialis.",
+        sets: 3,
+        reps: "10 - 12 reps",
+        instructions: ["Hold dumbbells with neutral grip (palms facing).", "Curl dumbbells upward, keeping neutral alignment."]
+      }
+    ],
+    triceps: [
+      {
         name: "Tricep Rope Pushdowns",
-        description: "Isolates lateral/medial heads.",
+        description: "Tricep lateral and medial heads focus.",
         sets: 3,
         reps: "12 - 15 reps",
-        instructions: ["Pull rope down from high pulley.", "Flare rope ends at bottom lockout."]
+        instructions: ["Pull rope down from high pulley, locking elbows.", "Flare rope ends at bottom lockout."]
+      },
+      {
+        name: "Barbell Skull Crushers",
+        description: "Excellent extension builder.",
+        sets: 3,
+        reps: "8 - 12 reps",
+        instructions: ["Lie on flat bench, hold barbell straight up.", "Lower bar to forehead by bending elbows.", "Press back to vertical."]
+      }
+    ],
+    forearms: [
+      {
+        name: "Barbell Wrist Curls",
+        description: "Isolates wrist flexors.",
+        sets: 3,
+        reps: "15 - 20 reps",
+        instructions: ["Sit on bench, hold barbell underhand, forearms on thighs.", "Curl wrist upward, squeeze forearms.", "Lower bar under control."]
+      },
+      {
+        name: "Dumbbell Farmer's Carry",
+        description: "Heavy loaded carry for grip mass.",
+        sets: 3,
+        reps: "40 meters",
+        instructions: ["Pick up heavy dumbbells, stand tall.", "Walk with steady controlled steps, keep grip locked."]
+      }
+    ],
+    core: [
+      {
+        name: "Cable Crunches",
+        description: "Weighted abdominal load.",
+        sets: 3,
+        reps: "12 - 15 reps",
+        instructions: ["Kneel below high pulley with rope attachment.", "Crunch downwards, bringing elbows to knees."]
+      },
+      {
+        name: "Captain's Chair Leg Raises",
+        description: "Lower ab isolation.",
+        sets: 3,
+        reps: "12 - 15 reps",
+        instructions: ["Rest forearms on pads, suspend body.", "Raise legs straight out to parallel, lower slowly."]
+      }
+    ],
+    thighs: [
+      {
+        name: "Barbell Back Squats",
+        description: "Fundamental leg strength builder.",
+        sets: 3,
+        reps: "8 - 10 reps",
+        instructions: ["Bar across upper back, squat down to parallel.", "Drive up through heels."]
+      },
+      {
+        name: "Leg Extensions",
+        description: "Quadriceps isolation.",
+        sets: 3,
+        reps: "10 - 12 reps",
+        instructions: ["Sit on machine, hook ankles behind pads.", "Extend legs straight out, squeeze quads, lower slowly."]
+      }
+    ],
+    calves: [
+      {
+        name: "Standing Calf Raises",
+        description: "Weighted calf building.",
+        sets: 3,
+        reps: "12 - 15 reps",
+        instructions: ["Stand on calf raise platform, shoulders under pads.", "Raise heels as high as possible, hold, lower slowly."]
       }
     ]
   },
   band: {
+    neck: [
+      {
+        name: "Banded Neck Resisted Flexion",
+        description: "Resisted head movements using elastic bands.",
+        sets: 3,
+        reps: "12 - 15 reps",
+        instructions: ["Anchor band at head level.", "Loop band around forehead, step back to tension.", "Slowly nod head forward against resistance."]
+      }
+    ],
     chest: [
       {
         name: "Banded Chest Fly",
@@ -465,38 +649,6 @@ const EXERCISES_DATA: Record<WorkoutType, Record<BodyPart, Exercise[]>> = {
         instructions: ["Anchor band high.", "Pull hands to ears, flaring elbows."]
       }
     ],
-    core: [
-      {
-        name: "Banded Pallof Press",
-        description: "Excellent anti-rotation core builder.",
-        sets: 3,
-        reps: "12 reps per side",
-        instructions: ["Anchor band at chest height sideways.", "Hold band at chest, press straight out, resist rotation."]
-      },
-      {
-        name: "Banded Woodchoppers",
-        description: "Banded rotational core training.",
-        sets: 3,
-        reps: "15 reps per side",
-        instructions: ["Anchor band high.", "Pull down and across body in diagonal chopping motion."]
-      }
-    ],
-    legs: [
-      {
-        name: "Banded Squats",
-        description: "Adds progressive resistance to squats.",
-        sets: 3,
-        reps: "15 - 20 reps",
-        instructions: ["Stand on band, loop top over shoulders.", "Squat low, drive up against band tension."]
-      },
-      {
-        name: "Banded Kickbacks",
-        description: "Isolates glutes.",
-        sets: 3,
-        reps: "15 reps per leg",
-        instructions: ["Anchor band low, loop around ankle.", "Kick leg back straight against resistance."]
-      }
-    ],
     shoulders: [
       {
         name: "Banded Lateral Raises",
@@ -513,32 +665,74 @@ const EXERCISES_DATA: Record<WorkoutType, Record<BodyPart, Exercise[]>> = {
         instructions: ["Stand on band, press handles directly overhead from shoulders."]
       }
     ],
-    arms: [
+    biceps: [
       {
         name: "Banded Bicep Curls",
-        description: "Constant tension bicep curls.",
+        description: "Constant tension curls.",
         sets: 3,
         reps: "15 - 20 reps",
-        instructions: ["Stand on band, hold handles underhand.", "Curl up, squeezing biceps."]
-      },
+        instructions: ["Stand on band, hold handles underhand.", "Curl handles upwards, squeeze biceps at top."]
+      }
+    ],
+    triceps: [
       {
         name: "Banded Tricep Pushdowns",
-        description: "Isolates triceps.",
+        description: "Isolates triceps overhead/downwards.",
         sets: 3,
         reps: "15 - 20 reps",
-        instructions: ["Anchor band overhead, pull down, locking elbows."]
+        instructions: ["Anchor band high, pull down keeping elbows fixed.", "Lock out arms, squeeze triceps."]
+      }
+    ],
+    forearms: [
+      {
+        name: "Banded Wrist Curls",
+        description: "Improves forearm thickness.",
+        sets: 3,
+        reps: "15 - 20 reps",
+        instructions: ["Stand on band, loop end around hands, forearms flat on table.", "Curl wrists upward against elastic tension."]
+      }
+    ],
+    core: [
+      {
+        name: "Banded Pallof Press",
+        description: "Anti-rotation static hold.",
+        sets: 3,
+        reps: "12 reps per side",
+        instructions: ["Anchor band chest high sideways.", "Hold band at chest, press out straight, resist turning."]
+      }
+    ],
+    thighs: [
+      {
+        name: "Banded Squats",
+        description: "Squat overload.",
+        sets: 3,
+        reps: "15 - 20 reps",
+        instructions: ["Stand on band, loop top over shoulders.", "Squat low, rise against elastic resistance."]
+      }
+    ],
+    calves: [
+      {
+        name: "Banded Calf Flexion",
+        description: "Seated calf presses.",
+        sets: 3,
+        reps: "20 - 25 reps",
+        instructions: ["Sit on floor, loop band around ball of foot.", "Hold ends, press foot forward against band, squeeze calf."]
       }
     ]
   }
 }
 
 const BODY_PARTS_INFO: Record<BodyPart, { name: string; stat: string; desc: string }> = {
+  neck: { name: 'Neck / Ghar', stat: 'Endurance (+1)', desc: 'Stabilize posture and heavy weight holding.' },
   chest: { name: 'Chest', stat: 'Endurance (+1)', desc: 'Core buildup for upper body endurance.' },
-  back: { name: 'Back', stat: 'Endurance (+1)', desc: 'Strengthen spine and lats for physical posture.' },
-  core: { name: 'Core / Abs', stat: 'Stamina (+1)', desc: 'Establish center of gravity and stamina shield.' },
-  legs: { name: 'Legs', stat: 'Stamina (+1)', desc: 'Enhance mobility and solid power stance.' },
+  back: { name: 'Back / Lats', stat: 'Endurance (+1)', desc: 'Strengthen spine and lats for physical posture.' },
   shoulders: { name: 'Shoulders', stat: 'Attack Power (+1)', desc: 'Overhead strength loading for damage multipliers.' },
-  arms: { name: 'Arms', stat: 'Attack Power (+1)', desc: 'Bicep/Tricep building block for raw combat efficiency.' }
+  biceps: { name: 'Biceps', stat: 'Attack Power (+1)', desc: 'Bicep pulling load for raw lifting strength.' },
+  triceps: { name: 'Triceps', stat: 'Attack Power (+1)', desc: 'Tricep pushing load for dynamic punching/striking.' },
+  forearms: { name: 'Forearms', stat: 'Attack Power (+1)', desc: 'Grip strength and heavy physical handling capability.' },
+  core: { name: 'Core / Abs', stat: 'Stamina (+1)', desc: 'Establish center of gravity and stamina shield.' },
+  thighs: { name: 'Thighs / Quads', stat: 'Stamina (+1)', desc: 'Leg drive and lower-body explosion power.' },
+  calves: { name: 'Calves', stat: 'Stamina (+1)', desc: 'Ankle spring and rapid dynamic movement speed.' }
 }
 
 export default function WorkoutClient({ initialProfile, initialCompletedNames }: WorkoutClientProps) {
@@ -649,12 +843,18 @@ export default function WorkoutClient({ initialProfile, initialCompletedNames }:
       ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)'
       ctx.lineWidth = 1.5
 
-      if (selectedBodyPart === 'chest') {
-        // Polygon of chest: L Shoulder, R Shoulder, Spine Core
+      if (selectedBodyPart === 'neck') {
+        // Neck Circle
         ctx.beginPath()
-        ctx.moveTo(projectedPoints[5].px, projectedPoints[5].py)
-        ctx.lineTo(projectedPoints[8].px, projectedPoints[8].py)
-        ctx.lineTo(projectedPoints[3].px, projectedPoints[3].py)
+        ctx.arc(projectedPoints[1].px, projectedPoints[1].py, 12, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      } else if (selectedBodyPart === 'chest') {
+        // Polygon of chest: L Shoulder (6), R Shoulder (12), Abs (4)
+        ctx.beginPath()
+        ctx.moveTo(projectedPoints[6].px, projectedPoints[6].py)
+        ctx.lineTo(projectedPoints[12].px, projectedPoints[12].py)
+        ctx.lineTo(projectedPoints[4].px, projectedPoints[4].py)
         ctx.closePath()
         ctx.fill()
         ctx.stroke()
@@ -663,54 +863,82 @@ export default function WorkoutClient({ initialProfile, initialCompletedNames }:
         ctx.fillStyle = 'rgba(139, 92, 246, 0.12)'
         ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)'
         ctx.beginPath()
-        ctx.moveTo(projectedPoints[5].px, projectedPoints[5].py)
-        ctx.lineTo(projectedPoints[8].px, projectedPoints[8].py)
-        ctx.lineTo(projectedPoints[3].px, projectedPoints[3].py)
+        ctx.moveTo(projectedPoints[6].px, projectedPoints[6].py)
+        ctx.lineTo(projectedPoints[12].px, projectedPoints[12].py)
+        ctx.lineTo(projectedPoints[5].px, projectedPoints[5].py)
         ctx.closePath()
         ctx.fill()
         ctx.stroke()
       } else if (selectedBodyPart === 'core') {
-        // Core polygon: Chest Spine, L Hip, R Hip
+        // Core polygon: Chest Spine (2), L Hip (18), R Hip (23)
         ctx.beginPath()
         ctx.moveTo(projectedPoints[2].px, projectedPoints[2].py)
-        ctx.lineTo(projectedPoints[11].px, projectedPoints[11].py)
-        ctx.lineTo(projectedPoints[14].px, projectedPoints[14].py)
+        ctx.lineTo(projectedPoints[18].px, projectedPoints[18].py)
+        ctx.lineTo(projectedPoints[23].px, projectedPoints[23].py)
         ctx.closePath()
         ctx.fill()
         ctx.stroke()
-      } else if (selectedBodyPart === 'legs') {
-        // Left thigh
-        ctx.beginPath()
-        ctx.moveTo(projectedPoints[11].px, projectedPoints[11].py)
-        ctx.lineTo(projectedPoints[12].px, projectedPoints[12].py)
-        ctx.stroke()
-        // Right thigh
-        ctx.beginPath()
-        ctx.moveTo(projectedPoints[14].px, projectedPoints[14].py)
-        ctx.lineTo(projectedPoints[15].px, projectedPoints[15].py)
-        ctx.stroke()
       } else if (selectedBodyPart === 'shoulders') {
-        // Left & Right shoulder circles
+        // Left & Right shoulder circles (6, 12)
         ctx.beginPath()
-        ctx.arc(projectedPoints[5].px, projectedPoints[5].py, 15, 0, Math.PI * 2)
+        ctx.arc(projectedPoints[6].px, projectedPoints[6].py, 18, 0, Math.PI * 2)
         ctx.fill()
         ctx.stroke()
         ctx.beginPath()
-        ctx.arc(projectedPoints[8].px, projectedPoints[8].py, 15, 0, Math.PI * 2)
+        ctx.arc(projectedPoints[12].px, projectedPoints[12].py, 18, 0, Math.PI * 2)
         ctx.fill()
         ctx.stroke()
-      } else if (selectedBodyPart === 'arms') {
-        // Left Arm lines
+      } else if (selectedBodyPart === 'biceps') {
+        // Bicep points (7, 13)
         ctx.beginPath()
-        ctx.moveTo(projectedPoints[5].px, projectedPoints[5].py)
-        ctx.lineTo(projectedPoints[6].px, projectedPoints[6].py)
-        ctx.lineTo(projectedPoints[7].px, projectedPoints[7].py)
+        ctx.arc(projectedPoints[7].px, projectedPoints[7].py, 12, 0, Math.PI * 2)
+        ctx.fill()
         ctx.stroke()
-        // Right Arm lines
         ctx.beginPath()
-        ctx.moveTo(projectedPoints[8].px, projectedPoints[8].py)
-        ctx.lineTo(projectedPoints[9].px, projectedPoints[9].py)
-        ctx.lineTo(projectedPoints[10].px, projectedPoints[10].py)
+        ctx.arc(projectedPoints[13].px, projectedPoints[13].py, 12, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      } else if (selectedBodyPart === 'triceps') {
+        // Tricep points (8, 14)
+        ctx.fillStyle = 'rgba(139, 92, 246, 0.12)'
+        ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)'
+        ctx.beginPath()
+        ctx.arc(projectedPoints[8].px, projectedPoints[8].py, 12, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.arc(projectedPoints[14].px, projectedPoints[14].py, 12, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      } else if (selectedBodyPart === 'forearms') {
+        // Forearm points (10, 16)
+        ctx.beginPath()
+        ctx.arc(projectedPoints[10].px, projectedPoints[10].py, 10, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.arc(projectedPoints[16].px, projectedPoints[16].py, 10, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      } else if (selectedBodyPart === 'thighs') {
+        // Thigh points (19, 24)
+        ctx.beginPath()
+        ctx.arc(projectedPoints[19].px, projectedPoints[19].py, 16, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.arc(projectedPoints[24].px, projectedPoints[24].py, 16, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      } else if (selectedBodyPart === 'calves') {
+        // Calf points (21, 26)
+        ctx.beginPath()
+        ctx.arc(projectedPoints[21].px, projectedPoints[21].py, 12, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.arc(projectedPoints[26].px, projectedPoints[26].py, 12, 0, Math.PI * 2)
+        ctx.fill()
         ctx.stroke()
       }
     }
@@ -1015,7 +1243,7 @@ export default function WorkoutClient({ initialProfile, initialCompletedNames }:
             </button>
             <button
               onClick={() => setSelectedBodyPart((prev) => {
-                const parts: BodyPart[] = ['chest', 'back', 'shoulders', 'arms', 'core', 'legs']
+                const parts: BodyPart[] = ['neck', 'chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms', 'core', 'thighs', 'calves']
                 const idx = (parts.indexOf(prev) + 1) % parts.length
                 return parts[idx]
               })}
@@ -1152,7 +1380,19 @@ export default function WorkoutClient({ initialProfile, initialCompletedNames }:
                       >
                         <div className="flex justify-between items-start">
                           <div>
-                            <h4 className="text-sm font-bold text-white">{ex.name}</h4>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="text-sm font-bold text-white">{ex.name}</h4>
+                              <a
+                                href={`https://www.youtube.com/results?search_query=how+to+do+${encodeURIComponent(ex.name)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-white border border-red-900/50 hover:border-red-500 rounded text-[9px] font-bold uppercase transition-all"
+                                title="Watch tutorial on YouTube"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                                <span>Watch Guide</span>
+                              </a>
+                            </div>
                             <p className="text-[11px] text-gray-400 mt-1">{ex.description}</p>
                           </div>
                           <span className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-[9px] text-brand-blue font-bold tracking-wider">
@@ -1173,7 +1413,7 @@ export default function WorkoutClient({ initialProfile, initialCompletedNames }:
                           {isDone ? (
                             <span className="flex items-center gap-1.5 text-xs text-brand-blue font-bold">
                               <CheckCircle size={14} />
-                              <span>COMPLETED (+2-5 XP)</span>
+                              <span>COMPLETED (+5-10 XP)</span>
                             </span>
                           ) : (
                             <button
@@ -1264,7 +1504,7 @@ export default function WorkoutClient({ initialProfile, initialCompletedNames }:
                   <div>
                     <span className="block text-[9px] text-gray-500 uppercase font-bold">COMPLETION ELIXIR AWARDED</span>
                     <span className="text-xs font-bold text-white">
-                      Adds <span className="text-brand-gold font-mono font-black">+2 - +5 XP</span> & <span className="text-brand-blue uppercase">{BODY_PARTS_INFO[selectedBodyPart].stat}</span> to credentials upon successful sets checkout.
+                      Adds <span className="text-brand-gold font-mono font-black">+5 - +10 XP</span> & <span className="text-brand-blue uppercase">{BODY_PARTS_INFO[selectedBodyPart].stat}</span> to credentials upon successful sets checkout.
                     </span>
                   </div>
                 </div>

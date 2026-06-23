@@ -65,8 +65,8 @@ export async function completeWorkoutExercise(bodyPart: string, workoutType: str
   if (eError) return { error: 'Database verification failed.' }
   if (existing) return { error: 'Exercise already completed today.' }
 
-  // 3. Roll XP reward (2 - 5 XP)
-  const xpGained = Math.floor(Math.random() * 4) + 2 // random integer 2, 3, 4, 5
+  // 3. Roll XP reward (5 - 10 XP)
+  const xpGained = Math.floor(Math.random() * 6) + 5 // random integer 5 to 10
 
   // 4. Calculate stat gain based on body part
   const statGained = getStatCategoryForBodyPart(bodyPart)

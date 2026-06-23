@@ -75,12 +75,18 @@ export function processXPLoss(currentLevel: number, currentXP: number, xpToSubtr
 
 export function getStatCategoryForBodyPart(bodyPart: string): 'attack_power' | 'endurance' | 'stamina' {
   const part = bodyPart.toLowerCase()
-  if (part === 'shoulders' || part === 'arms') {
+  if (
+    part === 'shoulders' || 
+    part === 'arms' || 
+    part === 'biceps' || 
+    part === 'triceps' || 
+    part === 'forearms'
+  ) {
     return 'attack_power'
   }
-  if (part === 'chest' || part === 'back') {
+  if (part === 'chest' || part === 'back' || part === 'neck') {
     return 'endurance'
   }
-  // core, legs
+  // core, legs, thighs, calves
   return 'stamina'
 }
