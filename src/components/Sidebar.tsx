@@ -15,7 +15,8 @@ import {
   Zap, 
   LogOut, 
   Menu, 
-  X 
+  X,
+  Dumbbell
 } from 'lucide-react'
 import { signOut } from '@/app/actions/auth'
 import { Profile } from '@/types'
@@ -39,6 +40,7 @@ export default function Sidebar({ profile }: SidebarProps) {
   const navItems = [
     { name: 'System Hub', href: '/dashboard', icon: Home },
     { name: 'Custom Quests', href: '/my-quests', icon: Compass },
+    { name: 'Core Workout', href: '/workout', icon: Dumbbell },
     { name: 'Hunter Stats', href: '/stats', icon: BarChart2 },
     { name: 'Profile', href: '/profile', icon: User },
     { name: 'Leaderboard', href: '/leaderboard', icon: Trophy },
