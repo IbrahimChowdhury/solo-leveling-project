@@ -1,8 +1,6 @@
 import { adminGetNotifications } from '@/app/actions/admin'
 import AdminNotificationsForm from '@/components/AdminNotificationsForm'
 
-export const dynamic = 'force-dynamic'
-
 export default async function AdminNotificationsPage() {
   const notifications = await adminGetNotifications()
 

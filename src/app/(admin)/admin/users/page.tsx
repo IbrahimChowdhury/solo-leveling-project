@@ -1,8 +1,6 @@
 import { adminGetAllUsers } from '@/app/actions/admin'
 import AdminUsersList from '@/components/AdminUsersList'
 
-export const dynamic = 'force-dynamic'
-
 export default async function AdminUsersPage() {
   const users = await adminGetAllUsers()
 

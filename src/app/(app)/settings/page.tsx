@@ -2,8 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import SettingsForm from '@/components/SettingsForm'
 import { Profile } from '@/types'
-
-export const dynamic = 'force-dynamic'
+import { getProfile } from '@/app/actions/profile'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -15,13 +14,9 @@ export default async function SettingsPage() {
   }
 
   // 2. Fetch profile
-  const { data: profile, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  const profile = await getProfile()
 
-  if (error || !profile) {
+  if (!profile) {
     redirect('/login')
   }
 

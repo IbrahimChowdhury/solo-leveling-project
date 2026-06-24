@@ -3,7 +3,6 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { generateDailyQuests } from '@/lib/quests-generator'
 import { processXPLoss } from '@/lib/game'
 
-export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   // 1. Secure authorization

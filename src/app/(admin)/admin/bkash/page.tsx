@@ -2,7 +2,6 @@ import { getBkashConfig } from '@/app/actions/bkash'
 import { adminGetBkashRequests } from '@/app/actions/admin'
 import AdminBkashPanel from '@/components/AdminBkashPanel'
 
-export const dynamic = 'force-dynamic'
 
 export default async function AdminBkashPage() {
   const config = await getBkashConfig()

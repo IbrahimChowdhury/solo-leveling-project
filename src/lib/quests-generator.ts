@@ -102,29 +102,39 @@ export async function checkAndRunDailyReset(profile: Profile) {
   const adminDb = createAdminClient()
   const today = new Date().toISOString().split('T')[0]
 
-  // Find all unique dates < today where daily quests exist for this user
-  const { data: pastQuests } = await adminDb
-    .from('daily_quests')
-    .select('date')
-    .eq('user_id', profile.id)
-    .lt('date', today)
-    .order('date', { ascending: true })
-
-  const uniquePastDates = Array.from(new Set((pastQuests || []).map(q => q.date)))
-
-  for (const qDate of uniquePastDates) {
-    // Check if qDate was already processed via stat_history logs
-    const { data: existingHistory } = await adminDb
-      .from('stat_history')
-      .select('id')
+  // Fetch unique dates < today where daily quests exist, and existing stat history in parallel
+  const [pastQuestsRes, statHistoryRes] = await Promise.all([
+    adminDb
+      .from('daily_quests')
+      .select('date')
       .eq('user_id', profile.id)
-      .eq('date', qDate)
-      .maybeSingle()
+      .lt('date', today)
+      .order('date', { ascending: true }),
+    adminDb
+      .from('stat_history')
+      .select('date')
+      .eq('user_id', profile.id)
+  ])
 
-    if (existingHistory) {
-      continue
-    }
+  if (pastQuestsRes.error) {
+    console.error('Failed to fetch past quests for reset:', pastQuestsRes.error)
+    return
+  }
+  if (statHistoryRes.error) {
+    console.error('Failed to fetch stat history for reset:', statHistoryRes.error)
+    return
+  }
 
+  const pastQuests = pastQuestsRes.data || []
+  const statHistory = statHistoryRes.data || []
+
+  const historyDatesSet = new Set(statHistory.map(h => h.date))
+  const uniquePastDates = Array.from(new Set(pastQuests.map(q => q.date)))
+
+  // Filter down to only unprocessed dates
+  const unprocessedDates = uniquePastDates.filter(qDate => !historyDatesSet.has(qDate))
+
+  for (const qDate of unprocessedDates) {
     // Fetch the most updated profile state from database
     const { data: currentProfile, error: pErr } = await adminDb
       .from('profiles')

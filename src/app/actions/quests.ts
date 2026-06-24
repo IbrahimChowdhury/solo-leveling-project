@@ -1,10 +1,27 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { processXP } from '@/lib/game'
-import { revalidatePath, revalidateTag } from 'next/cache'
+import { revalidatePath, cacheLife, cacheTag, updateTag } from 'next/cache'
 import { generateDailyQuests } from '@/lib/quests-generator'
 import type { StatCategory } from '@/types'
+
+async function getDailyQuestsCached(userId: string, dateStr: string) {
+  'use cache'
+  cacheLife('hours')
+  cacheTag(`daily-quests-${userId}-${dateStr}`)
+
+  const adminDb = createAdminClient()
+  const { data: quests, error } = await adminDb
+    .from('daily_quests')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('date', dateStr)
+    .order('created_at', { ascending: true })
+
+  if (error) return []
+  return quests
+}
 
 export async function getDailyQuests() {
   const supabase = await createClient()
@@ -12,13 +29,21 @@ export async function getDailyQuests() {
   if (!user) return []
 
   const today = new Date().toISOString().split('T')[0]
+  return getDailyQuestsCached(user.id, today)
+}
 
-  const { data: quests, error } = await supabase
-    .from('daily_quests')
+async function getCustomQuestsCached(userId: string) {
+  'use cache'
+  cacheLife('hours')
+  cacheTag(`custom-quests-${userId}`)
+
+  const adminDb = createAdminClient()
+  const { data: quests, error } = await adminDb
+    .from('custom_quests')
     .select('*')
-    .eq('user_id', user.id)
-    .eq('date', today)
-    .order('created_at', { ascending: true })
+    .eq('user_id', userId)
+    .eq('active', true)
+    .order('created_at', { ascending: false })
 
   if (error) return []
   return quests
@@ -29,15 +54,7 @@ export async function getCustomQuests() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return []
 
-  const { data: quests, error } = await supabase
-    .from('custom_quests')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('active', true)
-    .order('created_at', { ascending: false })
-
-  if (error) return []
-  return quests
+  return getCustomQuestsCached(user.id)
 }
 
 export async function completeDailyQuest(questId: string, proofImageUrl: string | null = null) {
@@ -167,6 +184,10 @@ export async function completeDailyQuest(questId: string, proofImageUrl: string 
     })
   }
 
+  const today = new Date().toISOString().split('T')[0]
+  updateTag(`daily-quests-${user.id}-${today}`)
+  updateTag(`profile-${user.id}`)
+  updateTag(`custom-quests-${user.id}`)
   revalidatePath('/')
   revalidatePath('/dashboard')
   revalidatePath('/profile')
@@ -322,6 +343,10 @@ export async function completeCustomQuest(questId: string, proofImageUrl: string
     })
   }
 
+  const today = new Date().toISOString().split('T')[0]
+  updateTag(`custom-quests-${user.id}`)
+  updateTag(`daily-quests-${user.id}-${today}`)
+  updateTag(`profile-${user.id}`)
   revalidatePath('/my-quests')
   revalidatePath('/dashboard')
   revalidatePath('/')
@@ -433,6 +458,9 @@ export async function addCustomQuest(
     }
   }
 
+  const today = new Date().toISOString().split('T')[0]
+  updateTag(`custom-quests-${user.id}`)
+  updateTag(`daily-quests-${user.id}-${today}`)
   revalidatePath('/my-quests')
   revalidatePath('/dashboard')
   revalidatePath('/')
@@ -507,6 +535,9 @@ export async function deleteCustomQuest(questId: string) {
     }
   }
 
+  const today = new Date().toISOString().split('T')[0]
+  updateTag(`custom-quests-${user.id}`)
+  updateTag(`daily-quests-${user.id}-${today}`)
   revalidatePath('/my-quests')
   revalidatePath('/dashboard')
   revalidatePath('/')
@@ -670,6 +701,8 @@ export async function editCustomQuest(
     }
   }
 
+  updateTag(`custom-quests-${user.id}`)
+  updateTag(`daily-quests-${user.id}-${today}`)
   revalidatePath('/my-quests')
   revalidatePath('/dashboard')
   revalidatePath('/')
@@ -803,6 +836,8 @@ export async function claimExampleQuest(
     })
   }
 
+  updateTag(`daily-quests-${user.id}-${today}`)
+  updateTag(`profile-${user.id}`)
   revalidatePath('/')
   revalidatePath('/dashboard')
   revalidatePath('/profile')

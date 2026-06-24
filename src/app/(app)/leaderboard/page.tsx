@@ -2,8 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { Trophy, ShieldAlert, Award } from 'lucide-react'
 import { Profile } from '@/types'
-
-export const dynamic = 'force-dynamic'
+import { getProfile } from '@/app/actions/profile'
 
 export default async function LeaderboardPage() {
   const supabase = await createClient()
@@ -15,11 +14,7 @@ export default async function LeaderboardPage() {
   }
 
   // 2. Fetch current user's profile to evaluate Pro permissions
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('is_pro')
-    .eq('id', user.id)
-    .single()
+  const profile = await getProfile()
 
   const isPro = !!profile?.is_pro
 

@@ -4,8 +4,6 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { BarChart, Users, Bell, CreditCard } from 'lucide-react'
 
-export const dynamic = 'force-dynamic'
-
 export default async function AdminLayout({
   children,
 }: {

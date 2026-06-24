@@ -20,6 +20,8 @@ export const metadata: Metadata = {
   },
 };
 
+import { Suspense } from 'react'
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -30,7 +32,9 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <Suspense fallback={null}>
+        <body className="min-h-full flex flex-col">{children}</body>
+      </Suspense>
     </html>
   );
 }

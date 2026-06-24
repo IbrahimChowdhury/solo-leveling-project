@@ -3,8 +3,7 @@ import { redirect } from 'next/navigation'
 import UpgradeOptions from '@/components/UpgradeOptions'
 import { Profile } from '@/types'
 import { getBkashConfig, getUserRequests } from '@/app/actions/bkash'
-
-export const dynamic = 'force-dynamic'
+import { getProfile } from '@/app/actions/profile'
 
 export default async function UpgradePage() {
   const supabase = await createClient()
@@ -16,13 +15,9 @@ export default async function UpgradePage() {
   }
 
   // 2. Fetch profile
-  const { data: profile, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  const profile = await getProfile()
 
-  if (error || !profile) {
+  if (!profile) {
     redirect('/login')
   }
 

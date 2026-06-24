@@ -1,8 +1,29 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { processXP, getStatCategoryForBodyPart } from '@/lib/game'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, cacheLife, cacheTag, updateTag } from 'next/cache'
+
+async function getCompletedWorkoutsTodayCached(userId: string, dateStr: string, todayStartStr: string) {
+  'use cache'
+  cacheLife('hours')
+  cacheTag(`workouts-today-${userId}-${dateStr}`)
+
+  const adminDb = createAdminClient()
+  const { data, error } = await adminDb
+    .from('workout_completions')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('completed_at', todayStartStr)
+    .order('completed_at', { ascending: true })
+
+  if (error) {
+    console.error('Error fetching today\'s workouts:', error)
+    return []
+  }
+
+  return data
+}
 
 /**
  * Fetch all workouts completed by the current user today
@@ -12,22 +33,10 @@ export async function getCompletedWorkoutsToday() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return []
 
+  const todayStr = new Date().toISOString().split('T')[0]
   const todayStart = new Date()
   todayStart.setUTCHours(0, 0, 0, 0)
-
-  const { data, error } = await supabase
-    .from('workout_completions')
-    .select('*')
-    .eq('user_id', user.id)
-    .gte('completed_at', todayStart.toISOString())
-    .order('completed_at', { ascending: true })
-
-  if (error) {
-    console.error('Error fetching today\'s workouts:', error)
-    return []
-  }
-
-  return data
+  return getCompletedWorkoutsTodayCached(user.id, todayStr, todayStart.toISOString())
 }
 
 /**
@@ -142,6 +151,9 @@ export async function completeWorkoutExercise(bodyPart: string, workoutType: str
       skills: profile.skills,
     })
   }
+
+  updateTag(`workouts-today-${user.id}-${todayStr}`)
+  updateTag(`profile-${user.id}`)
 
   revalidatePath('/workout')
   revalidatePath('/')

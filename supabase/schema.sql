@@ -214,3 +214,11 @@ create policy "Admins can manage notifications" on public.admin_notifications
 -- Here are policies to run on storage.objects if bucket 'avatars' is created:
 -- create policy "Avatar upload policy" on storage.objects for insert with check (bucket_id = 'avatars' and auth.uid()::text = (storage.foldername(name))[1]);
 -- create policy "Avatar read policy" on storage.objects for select using (bucket_id = 'avatars');
+
+-- 10. Performance Optimization Indexes
+create index if not exists daily_quests_user_id_date_idx on public.daily_quests(user_id, date);
+create index if not exists stat_history_user_id_date_idx on public.stat_history(user_id, date);
+create index if not exists custom_quests_user_id_idx on public.custom_quests(user_id);
+create index if not exists workout_completions_user_id_completed_at_idx on public.workout_completions(user_id, completed_at);
+create index if not exists penalties_user_id_idx on public.penalties(user_id);
+

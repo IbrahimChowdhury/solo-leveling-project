@@ -1,20 +1,34 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, cacheLife, cacheTag, updateTag } from 'next/cache'
+import { cache } from 'react'
 
 import { createAdminClient } from '@/lib/supabase/server'
 
-export async function getProfile() {
+// Cached profile fetch using Next.js 16 Cache Components
+async function getProfileCached(userId: string, cacheBuster: string) {
+  'use cache'
+  cacheLife('hours')
+  cacheTag(`profile-${userId}`)
+
+  const adminDb = createAdminClient()
+  const { data: profile } = await adminDb
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single()
+  return profile
+}
+
+export async function getProfile(forceRefresh = false) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  let { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  // Passing a different cache buster argument generates a separate cache entry
+  const cacheBuster = forceRefresh ? Math.random().toString() : 'default'
+  let profile = await getProfileCached(user.id, cacheBuster)
 
   // Database recovery fallback: Create profile if missing from table
   if (!profile) {
@@ -52,6 +66,28 @@ export async function getProfile() {
   return profile
 }
 
+// Cached notifications fetch using Next.js 16 Cache Components
+async function getUserNotificationsCached(userId: string) {
+  'use cache'
+  cacheLife('hours')
+  cacheTag(`user-notifications-${userId}`)
+  cacheTag('user-notifications-global')
+
+  const adminDb = createAdminClient()
+  const { data, error } = await adminDb
+    .from('admin_notifications')
+    .select('*')
+    .or(`user_id.is.null,user_id.eq.${userId}`)
+    .order('created_at', { ascending: false })
+    .limit(3)
+  if (error) return []
+  return data || []
+}
+
+export async function getUserNotifications(userId: string) {
+  return getUserNotificationsCached(userId)
+}
+
 export async function updateProfile(displayName: string, avatarUrl: string | null) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -74,6 +110,7 @@ export async function updateProfile(displayName: string, avatarUrl: string | nul
     return { error: error.message }
   }
 
+  updateTag(`profile-${user.id}`)
   revalidatePath('/profile')
   revalidatePath('/')
   return { success: true }
@@ -84,7 +121,9 @@ export async function usePenaltyShield() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated.' }
 
-  const { data: profile } = await supabase
+  // Bypass cache to evaluate penalty shield status correctly in Server Action
+  const adminDb = createAdminClient()
+  const { data: profile } = await adminDb
     .from('profiles')
     .select('is_pro, penalty_shield_used_this_week')
     .eq('id', user.id)
@@ -106,6 +145,7 @@ export async function usePenaltyShield() {
     return { error: error.message }
   }
 
+  updateTag(`profile-${user.id}`)
   revalidatePath('/profile')
   return { success: true }
 }

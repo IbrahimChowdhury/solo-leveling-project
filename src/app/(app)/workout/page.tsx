@@ -5,8 +5,6 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ShieldAlert, Zap, Dumbbell, Lock } from 'lucide-react'
 
-export const dynamic = 'force-dynamic'
-
 export default async function WorkoutPage() {
   const profile = await getProfile()
 
