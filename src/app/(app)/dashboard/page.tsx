@@ -23,11 +23,13 @@ export default async function DashboardPage() {
   }
 
   // 3. Run self-healing daily reset evaluations
-  await checkAndRunDailyReset(profile as Profile)
+  const didReset = await checkAndRunDailyReset(profile as Profile)
   await generateDailyQuests(profile as Profile)
 
-  // Refetch profile to get the up-to-date stats/levels after resets
-  profile = await getProfile(true)
+  // Refetch profile to get the up-to-date stats/levels after resets only if didReset is true
+  if (didReset) {
+    profile = await getProfile(true)
+  }
 
   // 4. Fetch actual daily quests, custom quests, and notifications from cache
   const [dailyQuests, customQuests, notifications] = await Promise.all([
