@@ -1,7 +1,6 @@
 import { Profile, StatCategory } from '@/types'
 import { createAdminClient } from '@/lib/supabase/server'
 import { processXPLoss } from './game'
-import { updateTag } from 'next/cache'
 
 interface QuestTemplate {
   title: string
@@ -95,9 +94,6 @@ export async function generateDailyQuests(profile: Profile) {
     console.error('Failed to generate daily quests:', error)
     return []
   }
-
-  // Invalidate cache since we generated quests
-  updateTag(`daily-quests-${profile.id}-${today}`)
 
   return data
 }
@@ -299,10 +295,6 @@ export async function checkAndRunDailyReset(profile: Profile): Promise<boolean> 
         skills: latestProfile.skills,
       })
     }
-  }
-
-  if (didUpdate) {
-    updateTag(`profile-${profile.id}`)
   }
 
   return didUpdate

@@ -5,6 +5,7 @@ import { revalidatePath, cacheLife, cacheTag, updateTag } from 'next/cache'
 import { cache } from 'react'
 
 import { createAdminClient } from '@/lib/supabase/server'
+import { checkAndRunDailyReset, generateDailyQuests } from '@/lib/quests-generator'
 
 // Cached profile fetch using Next.js 16 Cache Components
 async function getProfileCached(userId: string, cacheBuster: string) {
@@ -190,4 +191,45 @@ export async function exportUserData() {
     penalties: penaltiesRes.data || [],
     subscription: subRes.data || [],
   }
+}
+
+export async function triggerDailyResetAndQuestGeneration() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
+  // Fetch the latest profile state (force bypass cache)
+  const profile = await getProfile(true)
+  if (!profile) return { error: 'Profile not found.' }
+
+  const today = new Date().toISOString().split('T')[0]
+  
+  // Check if today's quests exist in the database before calling generateDailyQuests
+  const adminDb = createAdminClient()
+  const { data: existingQuests } = await adminDb
+    .from('daily_quests')
+    .select('id')
+    .eq('user_id', profile.id)
+    .eq('date', today)
+    .limit(1)
+
+  const questsNeedGeneration = !existingQuests || existingQuests.length === 0
+
+  // Run the daily reset evaluation
+  const didReset = await checkAndRunDailyReset(profile)
+  
+  let didGenerate = false
+  if (questsNeedGeneration) {
+    await generateDailyQuests(profile)
+    didGenerate = true
+  }
+
+  const updated = didReset || didGenerate
+
+  if (updated) {
+    updateTag(`profile-${profile.id}`)
+    updateTag(`daily-quests-${profile.id}-${today}`)
+  }
+
+  return { success: true, updated }
 }

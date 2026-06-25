@@ -19,6 +19,7 @@ import {
 import { Profile, DailyQuest, CustomQuest, AdminNotification, StatCategory } from '@/types'
 import { completeDailyQuest, completeCustomQuest, claimExampleQuest } from '@/app/actions/quests'
 import { dismissProWelcomePopup } from '@/app/actions/bkash'
+import { triggerDailyResetAndQuestGeneration } from '@/app/actions/profile'
 import CelebrationOverlays from './CelebrationOverlays'
 
 // ─── Static Example Quests (shown when hunter has no custom daily quests) ────
@@ -146,6 +147,24 @@ export default function DashboardHub({
     const savedView = localStorage.getItem('solo_leveling_quests_view')
     if (savedView) setViewMode(savedView as any)
   }, [])
+
+  useEffect(() => {
+    let active = true
+    async function checkReset() {
+      try {
+        const res = await triggerDailyResetAndQuestGeneration()
+        if (active && res && 'updated' in res && res.updated) {
+          router.refresh()
+        }
+      } catch (err) {
+        console.error('Failed to trigger daily reset:', err)
+      }
+    }
+    checkReset()
+    return () => {
+      active = false
+    }
+  }, [router])
 
   const handleSortChange = (newSort: 'created' | 'status' | 'priority' | 'category' | 'title') => {
     setSortBy(newSort)

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { generateDailyQuests } from '@/lib/quests-generator'
 import { processXPLoss } from '@/lib/game'
+import { revalidateTag } from 'next/cache'
 
 
 export async function GET(request: Request) {
@@ -45,6 +46,7 @@ export async function GET(request: Request) {
       if (!quests || quests.length === 0) {
         // No quests generated yesterday. Generate for today and continue.
         await generateDailyQuests(profile)
+        revalidateTag(`daily-quests-${profile.id}-${today}`, 'max')
         results.push({ userId: profile.id, status: 'no_yesterday_quests_generated_today' })
         continue
       }
@@ -139,6 +141,8 @@ export async function GET(request: Request) {
         ...profile,
         ...profileUpdates,
       })
+      revalidateTag(`daily-quests-${profile.id}-${today}`, 'max')
+      revalidateTag(`profile-${profile.id}`, 'max')
 
       // 6. Log stat history entry for the processed day
       await adminDb.from('stat_history').insert({

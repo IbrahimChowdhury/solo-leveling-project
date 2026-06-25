@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation'
 import DashboardHub from '@/components/DashboardHub'
 import { getProfile, getUserNotifications } from '@/app/actions/profile'
 import { getDailyQuests, getCustomQuests } from '@/app/actions/quests'
-import { checkAndRunDailyReset, generateDailyQuests } from '@/lib/quests-generator'
 import { Profile } from '@/types'
 
 export default async function DashboardPage() {
@@ -22,14 +21,6 @@ export default async function DashboardPage() {
     redirect('/login')
   }
 
-  // 3. Run self-healing daily reset evaluations
-  const didReset = await checkAndRunDailyReset(profile as Profile)
-  await generateDailyQuests(profile as Profile)
-
-  // Refetch profile to get the up-to-date stats/levels after resets only if didReset is true
-  if (didReset) {
-    profile = await getProfile(true)
-  }
 
   // 4. Fetch actual daily quests, custom quests, and notifications from cache
   const [dailyQuests, customQuests, notifications] = await Promise.all([
